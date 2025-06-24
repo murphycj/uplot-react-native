@@ -2,6 +2,15 @@
   "name": "uplot-react-native",
   "version": "0.1.0",
   "description": "React Native wrapper for uPlot on web, iOS, and Android",
+  "homepage": "https://github.com/murphycj/uplot-react-native",
+  "bugs": {
+    "url": "https://github.com/murphycj/uplot-react-native/issues"
+  },
+  "author": "Charlie Murphy (https://github.com/murphycj)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/murphycj/uplot-react-native.git"
+  },
   "main": "dist/index.js",
   "types": "dist/index",
   "files": [
@@ -9,10 +18,12 @@
   ],
   "scripts": {
     "build": "tsc && node scripts/replace-uplot-assets.js",
-    "ci": "npm run build && npm run check-format",
+    "ci": "npm run build && npm run check-format && npm run check-exports",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "check-exports": "attw --pack ."
+    "check-exports": "attw --pack .",
+    "local-release": "changeset version && changeset publish",
+    "prepublishOnly": "npm run ci"
   },
   "dependencies": {
     "react-native-webview": ">=13.0.0",
@@ -20,6 +31,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",
+    "@changesets/cli": "^2.29.5",
     "@types/react": "^17.0.0",
     "@types/react-native": "^0.64.0",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
