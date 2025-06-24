@@ -1,0 +1,19 @@
+name: node-ci
+on: [push]
+
+jobs:
+  check:
+    name: Check code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: yarn
+
+      - name: Check exports
+        run: npm run check-exports
+
+      - name: Check prettier
+        run: npm run check-prettier
