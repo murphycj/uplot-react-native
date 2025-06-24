@@ -1,29 +1,31 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Platform, StyleSheet, SafeAreaView } from 'react-native';
 
-import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ChartUPlot } from 'uplot-react-native';
 
+var data = [[Date.now()], [Math.random() * 100]];
+
 export default function HomeScreen() {
+  // create ref for chart
+  const chartRef = useRef(null);
+
+  useEffect(() => {
+    setInterval(() => {
+      chartRef.current?.pushData([Date.now(), Math.random() * 100]);
+    }, 1000);
+  }, []);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }
+    <SafeAreaView
+      style={{
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fff',
+      }}
     >
       <ChartUPlot
-        data={[
-          [
-            1672531200000, 1672617600000, 1672704000000, 1672790400000,
-            1672876800000, 1672963200000, 1673049600000, 1673136000000,
-            1673222400000, 1673308800000,
-          ],
-          [10, 15, 13, 17, 14, 18, 16, 19, 15, 20],
-        ]}
+        data={data}
         options={{
           id: 'chart',
           width: 300,
@@ -39,8 +41,9 @@ export default function HomeScreen() {
           width: 300,
           height: 300,
         }}
+        ref={chartRef}
       />
-    </ParallaxScrollView>
+    </SafeAreaView>
   );
 }
 
