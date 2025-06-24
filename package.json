@@ -1,0 +1,36 @@
+{
+  "name": "uplot-react-native",
+  "version": "0.1.0",
+  "description": "React Native wrapper for uPlot on web, iOS, and Android",
+  "main": "dist/index.js",
+  "types": "dist/index",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/replace-uplot-assets.js",
+    "ci": "npm run build && npm run check-format",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "check-exports": "attw --pack ."
+  },
+  "dependencies": {
+    "react-native-webview": ">=13.0.0",
+    "uplot": ">=1.6.0"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@types/react": "^17.0.0",
+    "@types/react-native": "^0.64.0",
+    "@typescript-eslint/eslint-plugin": "^5.0.0",
+    "@typescript-eslint/parser": "^5.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.6.0",
+    "typescript": "^4.9.0"
+  },
+  "resolutions": {
+    "@types/react": "17.0.0",
+    "@types/react-dom": "17.0.0"
+  },
+  "license": "MIT"
+}
