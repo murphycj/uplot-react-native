@@ -5,7 +5,7 @@
     "declaration": true,
     "esModuleInterop": true,
     "target": "ES5",
-    "module": "CommonJS",
+    "module": "esnext",
     "outDir": "dist",
     "rootDir": "src",
     "skipLibCheck": true,

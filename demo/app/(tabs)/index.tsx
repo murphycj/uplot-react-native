@@ -1,9 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Platform, StyleSheet, SafeAreaView, Text } from 'react-native';
 
-import { ChartUPlot } from 'uplot-react-native';
+import ChartUPlot from 'uplot-react-native';
 
 var data = [[Date.now()], [Math.random() * 100]];
+var count = 1;
+
+var options = {
+  id: 'chart',
+  width: 300,
+  height: 300,
+  scales: { x: { time: true } },
+  series: [{ label: 'Time' }, { label: 'Value', stroke: 'blue', width: 2 }],
+  axes: [{ scale: 'x' }, {}],
+};
+var style = {
+  width: 300,
+  height: 300,
+};
 
 export default function HomeScreen() {
   // create ref for chart
@@ -12,9 +26,12 @@ export default function HomeScreen() {
 
   useEffect(() => {
     setInterval(() => {
-      // chartRef.current?.pushData([Date.now(), Math.random() * 100]);
-      // setNDataPoint((prev) => prev + 1);
-    }, 33);
+      chartRef.current?.pushData([Date.now(), Math.random() * 100]);
+      count++;
+    }, 1000);
+    setInterval(() => {
+      setNDataPoint(count);
+    }, 1000);
   }, []);
 
   return (
@@ -39,25 +56,7 @@ export default function HomeScreen() {
       <Text style={{ fontSize: 16, marginBottom: 16 }}>
         {nDataPoint} data points
       </Text>
-      <ChartUPlot
-        data={data}
-        options={{
-          id: 'chart',
-          width: 300,
-          height: 300,
-          scales: { x: { time: true } },
-          series: [
-            { label: 'Time' },
-            { label: 'Value', stroke: 'blue', width: 2 },
-          ],
-          axes: [{ scale: 'x' }, {}],
-        }}
-        style={{
-          width: 300,
-          height: 300,
-        }}
-        ref={chartRef}
-      />
+      <ChartUPlot data={data} options={options} style={style} ref={chartRef} />
     </SafeAreaView>
   );
 }

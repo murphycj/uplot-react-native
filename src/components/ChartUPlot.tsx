@@ -9,7 +9,8 @@ import { WebView } from 'react-native-webview';
 
 var isWeb = Platform.OS === 'web';
 
-const html = require('./uplot.html');
+// const html = require('./uplot.html');
+import html from './uplot.html';
 import 'uplot/dist/uPlot.min.css';
 
 var uPlot: any = null;
@@ -33,6 +34,26 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     let webref: any = useRef(null);
     const uplotInstance = useRef<any>(null);
     const dataRef = useRef(data);
+    const initialized = useRef(false);
+
+    const guardAndCreateJS = `
+        (function() {
+          if (window.__CHART_CREATED__) return;
+          window.__CHART_CREATED__ = true;
+
+          // stash your data and options on window
+          window._data = ${JSON.stringify(data)};
+          window._opts = ${JSON.stringify({
+            ...options,
+            width: style?.width || width,
+            height: style?.height || height,
+          })};
+
+          // now actually construct uPlot
+          window._chart = new uPlot(window._opts, window._data, document.getElementById('chart'));
+        })();
+        true;
+      `;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const createChart = useCallback((opts: any, data: number[][]): void => {
@@ -40,22 +61,35 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       opts.height = style?.height || 200;
       opts.width = style?.width || width;
 
+      if (initialized.current) {
+        // If already initialized, just set the data
+        // setData(data);
+        return;
+      }
+
       if (isWeb) {
         uplotInstance.current = new uPlot(opts, data, webref);
       } else {
         webref?.injectJavaScript(
-          `let data = ${JSON.stringify(data)}; let uplot = new uPlot(${JSON.stringify(opts)}, data, document.getElementById("chart"));true;`,
+          `
+          window._data = ${JSON.stringify(data)};
+          window._opts = ${JSON.stringify(opts)};
+          window._chart = new uPlot(window._opts, window._data, document.getElementById("chart"));
+          true;`,
         );
       }
+      initialized.current = true;
     }, []);
 
     const setData = useCallback((newData: number[][]): void => {
       if (isWeb) {
         uplotInstance.current?.setData(newData);
       } else {
-        webref?.injectJavaScript(
-          `uplot.setData(${JSON.stringify(newData)});true;`,
-        );
+        webref?.injectJavaScript(`
+          window._data = ${JSON.stringify(newData)};
+          window._chart.setData(window._data);
+          true;
+          `);
       }
     }, []);
 
@@ -72,10 +106,18 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       } else {
         webref?.injectJavaScript(`
           var item = ${JSON.stringify(item)};
-          for (let i = 0; i < item.length; i++) {
-            data[i].push(item[i]);
+
+          if (!window._data) {
+            window._data = [];
+            for (let i = 0; i < item.length; i++) {
+              window._data.push([]);
+            }
           }
-          uplot.setData(data);true;`);
+
+          for (let i = 0; i < item.length; i++) {
+            window._data[i].push(item[i]);
+          }
+          window._chart.setData(window._data);true;`);
       }
     }, []);
 
@@ -84,9 +126,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       if (isWeb) {
         uplotInstance.current?.setScale(axis, options);
       } else {
-        webref?.injectJavaScript(
-          `uplot.setScale(${JSON.stringify(axis)}, ${JSON.stringify(options)});true;`,
-        );
+        webref?.injectJavaScript(`
+          window._chart.setScale(${JSON.stringify(axis)}, ${JSON.stringify(options)});true;
+        `);
       }
     }, []);
 
@@ -96,7 +138,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         uplotInstance.current?.setSize(width, height);
       } else {
         webref?.injectJavaScript(
-          `uplot.setSize(${JSON.stringify(width)}, ${JSON.stringify(height)});true;`,
+          `window._chart.setSize(${JSON.stringify(width)}, ${JSON.stringify(height)});true;`,
         );
       }
     }, []);
@@ -106,7 +148,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       if (isWeb) {
         uplotInstance.current?.destroy();
       } else {
-        webref?.injectJavaScript('uplot.destroy();true;');
+        webref?.injectJavaScript('window._chart.destroy();true;');
       }
     }, []);
 
@@ -145,22 +187,16 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           }}
           scrollEnabled={false}
           onLoadEnd={(): void => {
-            console.log('WebView loaded');
-
-            createChart(options, data);
+            webref.injectJavaScript(guardAndCreateJS);
           }}
-          ref={(r): any => {
+          ref={(r) => {
             webref = r;
-            if (r) {
-              console.log('WebView ref set');
-
-              createChart(options, data);
-            }
           }}
+          javaScriptEnabled={true}
         />
       );
     }
   },
 );
 
-export default ChartUPlot;
+export default React.memo(ChartUPlot);

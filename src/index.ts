@@ -1,2 +1,1 @@
-export { default as ChartUPlot } from './components/ChartUPlot';
-export * from './components/ChartUPlot';
+export { default } from './components/ChartUPlot';
