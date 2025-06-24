@@ -22,29 +22,28 @@ yarn add uplot-react-native
 
 ## Usage
 
-Create a uPlot chart via the `ChartUPlot` component, which takes in initial data and options as props. The data and options take the same form as when you call `new uPlot(options, data)`. You can update the chart via a `ref`.
+Create a uPlot chart via `ChartUPlot`. The `data` and `options` props it takes are structured the same as when you call `new uPlot(options, data)`. You update the chart via a `ref`.
 
 ```javascript
 import { useRef, useEffect } from 'react';
 import { ChartUPlot } from 'uplot-react-native';
 
 var x = 6;
+const data = [
+  [1, 2, 3, 4, 5],
+  [5, 4, 3, 2, 1],
+];
+
+const options = {
+  id: 'chart',
+  width: 300,
+  height: 300,
+  scales: { x: { time: false } },
+  series: [{ label: 'X' }, { label: 'Value', stroke: 'blue', width: 2 }],
+  axes: [{ scale: 'x' }, {}],
+};
 
 const MyChart = () => {
-  const data = [
-    [1, 2, 3, 4, 5],
-    [5, 4, 3, 2, 1],
-  ];
-
-  const options = {
-    id: 'chart',
-    width: 300,
-    height: 300,
-    scales: { x: { time: false } },
-    series: [{ label: 'X' }, { label: 'Value', stroke: 'blue', width: 2 }],
-    axes: [{ scale: 'x' }, {}],
-  };
-
   const chartRef = useRef(null);
 
   useEffect(() => {
@@ -66,7 +65,7 @@ const MyChart = () => {
 };
 ```
 
-The ref exposes the following methods:
+The `ref` exposes the following methods:
 
 - `createChart(options, data)`: Create a new chart. The initial render of ChartUPlot will automatically call this method with the initial options and data.
 - `setData(newData)`: Replace the data in the chart.
