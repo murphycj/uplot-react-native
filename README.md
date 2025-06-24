@@ -4,6 +4,10 @@
 
 React native wrapper around [uPlot](https://github.com/leeoniya/uPlot). Works on web, iOS, and Android. Wraps uPlot in a [WebView](https://github.com/react-native-webview/react-native-webview) on iOS and Android. The video below demos its performance on a iOS development build (iPhone 15 Pro).
 
+<!-- add note warning its a work in progress -->
+
+**Note**: This library is a work in progress. It may not fully support all uPlot features yet, so feel free to open issues or pull requests to help improve it.
+
 ## Why?
 
 I needed a cross-platform library to plot thousands of data points in a streaming / real-time fashion. The performance of every library that I tested degraded after a couple thousand data points, except for uPlot. uPlot is one of the fastest javascript libraries for plotting data.
@@ -18,7 +22,7 @@ yarn add uplot-react-native
 
 ## Usage
 
-Create a chart by importing the `ChartUPlot` component from `uplot-react-native`. You can pass in the data and options as props. You can update the chart via a ref.
+Create a uPlot chart via the `ChartUPlot` component, which takes in initial data and options as props. The data and options take the same form as when you call `new uPlot(options, data)`. You can update the chart via a `ref`.
 
 ```javascript
 import { useRef, useEffect } from 'react';
