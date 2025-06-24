@@ -3,32 +3,54 @@ import { Platform, StyleSheet, SafeAreaView, Text } from 'react-native';
 
 import ChartUPlot from 'uplot-react-native';
 
-var data = [[Date.now()], [Math.random() * 100]];
-var count = 1;
+var makeData = (points = 1000) => {
+  const xs: number[] = new Array(points);
+  const ys: number[] = new Array(points);
+
+  for (let i = 0; i < points; i++) {
+    xs[i] = i;
+    ys[i] = Math.random() * 100;
+  }
+
+  return [xs, ys] as [number[], number[]];
+};
+
+var n = 500;
+var data1 = makeData(n);
+var data2 = makeData(n);
+var data3 = makeData(n);
+var count = n * 3;
 
 var options = {
   id: 'chart',
   width: 300,
-  height: 300,
-  scales: { x: { time: true } },
+  height: 150,
+  scales: { x: { time: false } },
   series: [{ label: 'Time' }, { label: 'Value', stroke: 'blue', width: 2 }],
   axes: [{ scale: 'x' }, {}],
 };
 var style = {
-  width: 300,
-  height: 300,
+  width: 400,
+  height: 150,
 };
 
 export default function HomeScreen() {
   // create ref for chart
-  const chartRef = useRef(null);
+  const chartRef1 = useRef(null);
+  const chartRef2 = useRef(null);
+  const chartRef3 = useRef(null);
   const [nDataPoint, setNDataPoint] = useState(1);
 
   useEffect(() => {
-    setInterval(() => {
-      chartRef.current?.pushData([Date.now(), Math.random() * 100]);
-      count++;
-    }, 1000);
+    setTimeout(() => {
+      setInterval(() => {
+        chartRef1.current?.pushData([n, Math.random() * 100]);
+        chartRef2.current?.pushData([n, Math.random() * 100]);
+        chartRef3.current?.pushData([n, Math.random() * 100]);
+        count = count + 3;
+        n = n + 1;
+      }, 10);
+    }, 10000);
     setInterval(() => {
       setNDataPoint(count);
     }, 1000);
@@ -56,7 +78,24 @@ export default function HomeScreen() {
       <Text style={{ fontSize: 16, marginBottom: 16 }}>
         {nDataPoint} data points
       </Text>
-      <ChartUPlot data={data} options={options} style={style} ref={chartRef} />
+      <ChartUPlot
+        data={data1}
+        options={options}
+        style={style}
+        ref={chartRef1}
+      />
+      <ChartUPlot
+        data={data2}
+        options={options}
+        style={style}
+        ref={chartRef2}
+      />
+      <ChartUPlot
+        data={data3}
+        options={options}
+        style={style}
+        ref={chartRef3}
+      />
     </SafeAreaView>
   );
 }
