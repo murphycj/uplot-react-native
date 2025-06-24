@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Platform, StyleSheet, SafeAreaView } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Platform, StyleSheet, SafeAreaView, Text } from 'react-native';
 
 import { ChartUPlot } from 'uplot-react-native';
 
@@ -8,11 +8,13 @@ var data = [[Date.now()], [Math.random() * 100]];
 export default function HomeScreen() {
   // create ref for chart
   const chartRef = useRef(null);
+  const [nDataPoint, setNDataPoint] = useState(1);
 
   useEffect(() => {
     setInterval(() => {
-      chartRef.current?.pushData([Date.now(), Math.random() * 100]);
-    }, 1000);
+      // chartRef.current?.pushData([Date.now(), Math.random() * 100]);
+      // setNDataPoint((prev) => prev + 1);
+    }, 33);
   }, []);
 
   return (
@@ -24,6 +26,19 @@ export default function HomeScreen() {
         backgroundColor: '#fff',
       }}
     >
+      <Text
+        style={{
+          fontSize: 24,
+          fontWeight: 'bold',
+          marginBottom: 16,
+          marginTop: 54,
+        }}
+      >
+        uPlot Chart Example
+      </Text>
+      <Text style={{ fontSize: 16, marginBottom: 16 }}>
+        {nDataPoint} data points
+      </Text>
       <ChartUPlot
         data={data}
         options={{
