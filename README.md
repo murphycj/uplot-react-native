@@ -74,6 +74,24 @@ The `ref` exposes the following methods:
 - `setSize(width, height)`: Set the size of the chart.
 - `destroy()`: Destroy the chart instance.
 
+## Demo app
+
+The `demo` folder contains an example Expo app that demonstrates how to use the library. You can run it by cloning the repository and running:
+
+```bash
+cd demo
+yarn
+
+# for web demo
+npx expo start
+
+# for iOS or Android simulators
+npx expo run:ios
+
+# for development build on a physical device
+eas build --profile development --platform ios --local
+```
+
 ## Contributing
 
 If you would like to contribute, please open an issue or a pull request. Contributions are welcome!
