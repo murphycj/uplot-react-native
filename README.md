@@ -2,9 +2,11 @@
 
 ## Description
 
-React native wrapper around [uPlot](https://github.com/leeoniya/uPlot). Works on web, iOS, and Android. Wraps uPlot in a [WebView](https://github.com/react-native-webview/react-native-webview) on iOS and Android. The video below demos its performance on a iOS development build (iPhone 15 Pro).
+React native wrapper around [uPlot](https://github.com/leeoniya/uPlot). Works on web, iOS, and Android. Wraps uPlot in a [WebView](https://github.com/react-native-webview/react-native-webview) on iOS and Android. The video below demos its performance on an Expo iOS development build (iPhone 15 Pro).
 
-<!-- add note warning its a work in progress -->
+<p align="center">
+<img src="https://github.com/user-attachments/assets/f9e2e65c-bfe2-40a4-87ef-4d68faa11e77" height="400" />
+</p>
 
 **Note**: This library is a work in progress. It may not fully support all uPlot features yet, so feel free to open issues or pull requests to help improve it.
 
