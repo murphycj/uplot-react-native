@@ -1,6 +1,6 @@
 # uplot-react-native
 
-React native wrapper around uPlot. Works on web, iOS, and Android. Wraps uPlot in a [WebView](https://github.com/react-native-webview/react-native-webview) on iOS and Android. The video below demos its performance on a iOS development build (iPhone 15 Pro).
+React native wrapper around [uPlot](https://github.com/leeoniya/uPlot). Works on web, iOS, and Android. Wraps uPlot in a [WebView](https://github.com/react-native-webview/react-native-webview) on iOS and Android. The video below demos its performance on a iOS development build (iPhone 15 Pro).
 
 # Why?
 
