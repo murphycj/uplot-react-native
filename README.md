@@ -78,7 +78,7 @@ The `ref` exposes the following methods:
 
 ### Setting dimensions
 
-You can set the width and height either through the uPlot `options` or by passing a `style` prop to the `ChartUPlot` component. If you set both, the uPlot `options` will take precedence.
+You can set the width and height either through the uPlot `options` or by passing a `style` prop to the `ChartUPlot` component. If you set both, the uPlot `options` will take precedence. Margin for the title and legend will be subtracted from the final width and height for the chart. You can control the margin via the `margin: { title?: number; legend?: number }` prop.
 
 ## Demo app
 
