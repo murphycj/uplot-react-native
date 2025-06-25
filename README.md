@@ -61,7 +61,7 @@ const MyChart = () => {
       ref={chartRef}
       data={data}
       options={options}
-      style={{ width: 500, height: 200 }}
+      style={{ width: 500, height: 200, backgroundColor: 'white' }}
     />
   );
 };
@@ -75,6 +75,10 @@ The `ref` exposes the following methods:
 - `setScale(axis, options)`: Set the scale options for a specific axis. The `axis` can be 'x' or 'y'.
 - `setSize(width, height)`: Set the size of the chart.
 - `destroy()`: Destroy the chart instance.
+
+### Setting dimensions
+
+You can set the width and height either through the uPlot `options` or by passing a `style` prop to the `ChartUPlot` component. If you set both, the uPlot `options` will take precedence.
 
 ## Demo app
 
