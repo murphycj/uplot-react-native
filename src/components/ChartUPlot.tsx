@@ -3,19 +3,66 @@ import React, {
   useCallback,
   useImperativeHandle,
   useRef,
+  useMemo,
+  useEffect,
 } from 'react';
-import { Platform, useWindowDimensions } from 'react-native';
+import { Platform, useWindowDimensions, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 var isWeb = Platform.OS === 'web';
 
-// const html = require('./uplot.html');
 import html from './uplot.html';
 import 'uplot/dist/uPlot.min.css';
 
 var uPlot: any = null;
 if (isWeb) {
   uPlot = require('uplot').default;
+}
+
+const MARGIN_TITLE = 27; // Height of the title
+const MARGIN_LEGEND = 50; // Height of the legend
+
+/**
+ * Calculate the dimensions for the uPlot chart based on options, style, and device dimensions.
+ * Adjusts for title and legend margins if they are present.
+ */
+function getDimensions(
+  options: any,
+  style: any,
+  deviceWidth: number,
+  deviceHeight: number,
+  margin: { title?: number; legend?: number },
+): {
+  optionsFinal: any;
+  containerWidth: number;
+  containerHeight: number;
+} {
+  var containerWidth = options?.width || style?.width || deviceWidth;
+  containerWidth = Math.min(containerWidth, deviceWidth);
+
+  var containerHeight = options?.height || style?.height || deviceHeight;
+  containerHeight = Math.min(containerHeight, deviceHeight);
+
+  var uplotWidth = containerWidth;
+  var uplotHeight = containerHeight;
+
+  if (options?.title) {
+    // Subtract height for title
+    uplotHeight -= margin.title || MARGIN_TITLE;
+  }
+
+  if (options?.legend?.show) {
+    // do nothing
+  } else {
+    // Subtract height for legend
+    uplotHeight -= margin.legend || MARGIN_LEGEND;
+  }
+
+  var optionsFinal = { ...options };
+  optionsFinal.width = uplotWidth;
+  optionsFinal.height = uplotHeight;
+
+  return { optionsFinal, containerWidth, containerHeight };
 }
 
 export interface UPlotProps {
@@ -25,10 +72,20 @@ export interface UPlotProps {
   options: any;
   /** Additional style for the container */
   style?: any;
+  /** Margin for the chart, useful for titles and legends */
+  margin?: { title?: number; legend?: number };
 }
 
 const ChartUPlot = forwardRef<any, UPlotProps>(
-  ({ data, options, style }, ref) => {
+  (
+    {
+      data,
+      options,
+      style,
+      margin = { title: MARGIN_TITLE, legend: MARGIN_LEGEND },
+    },
+    ref,
+  ) => {
     // Native: render uPlot inside a WebView
     const { width, height } = useWindowDimensions();
     let webref: any = useRef(null);
@@ -36,50 +93,70 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const dataRef = useRef(data);
     const initialized = useRef(false);
 
-    const guardAndCreateJS = `
-        (function() {
-          if (window.__CHART_CREATED__) return;
-          window.__CHART_CREATED__ = true;
+    const bgColor = style?.backgroundColor || 'transparent';
 
-          // stash your data and options on window
-          window._data = ${JSON.stringify(data)};
-          window._opts = ${JSON.stringify({
-            ...options,
-            width: style?.width || width,
-            height: style?.height || height,
-          })};
+    var { optionsFinal, containerWidth, containerHeight } = useMemo(() => {
+      return getDimensions(options, style, width, height, margin);
+    }, [options, style, width, height]);
 
-          // now actually construct uPlot
-          window._chart = new uPlot(window._opts, window._data, document.getElementById('chart'));
-        })();
-        true;
-      `;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const createChart = useCallback((opts: any, data: number[][]): void => {
-      // Subtracting height of u-title and u-legend and some more?
-      opts.height = style?.height || 200;
-      opts.width = style?.width || width;
-
-      if (initialized.current) {
-        // If already initialized, just set the data
-        // setData(data);
-        return;
-      }
+    useEffect(() => {
+      // update uplot height and width if options change
 
       if (isWeb) {
-        uplotInstance.current = new uPlot(opts, data, webref);
+        uplotInstance.current?.setSize({
+          width: containerWidth,
+          height: containerHeight,
+        });
       } else {
-        webref?.injectJavaScript(
-          `
+        webref?.injectJavaScript(`
+          window._chart.setSize(${JSON.stringify(containerWidth)}, ${JSON.stringify(containerHeight)});
+          true;
+        `);
+      }
+    }, [containerWidth, containerHeight]);
+
+    // const guardAndCreateJS = `
+    //     (function() {
+    //       if (window.__CHART_CREATED__) return;
+    //       window.__CHART_CREATED__ = true;
+
+    //       // stash your data and options on window
+    //       window._data = ${JSON.stringify(data)};
+    //       window._opts = ${JSON.stringify(options)};
+
+    //       // now actually construct uPlot
+    //       window._chart = new uPlot(window._opts, window._data, document.getElementById('chart'));
+    //     })();
+    //     true;
+    //   `;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const createChart = useCallback(
+      (opts: any, data: number[][]): void => {
+        if (initialized.current) {
+          return;
+        }
+
+        if (isWeb) {
+          uplotInstance.current = new uPlot(opts, data, webref);
+        } else {
+          // inject background color before chart setup if provided
+          const bgJS = bgColor
+            ? `document.body.style.backgroundColor='${bgColor}';`
+            : '';
+          webref?.injectJavaScript(
+            `${bgJS}
           window._data = ${JSON.stringify(data)};
           window._opts = ${JSON.stringify(opts)};
           window._chart = new uPlot(window._opts, window._data, document.getElementById("chart"));
-          true;`,
-        );
-      }
-      initialized.current = true;
-    }, []);
+          true;
+          `,
+          );
+        }
+        initialized.current = true;
+      },
+      [bgColor],
+    );
 
     const setData = useCallback((newData: number[][]): void => {
       if (isWeb) {
@@ -163,16 +240,18 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
     if (Platform.OS === 'web') {
       return (
-        <div
-          // eslint-disable-next-line react-native/no-inline-styles
+        <View
           ref={(r): any => {
             webref = r;
             if (r) {
-              createChart(options, data);
+              createChart(optionsFinal, data);
             }
           }}
-          // eslint-disable-next-line react-native/no-inline-styles
-          style={style as React.CSSProperties}
+          style={{
+            ...style,
+            width: containerWidth,
+            height: containerHeight,
+          }}
         />
       );
     } else {
@@ -181,13 +260,14 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           originWhitelist={['*']}
           source={html}
           style={{
-            height: style?.height || height,
-            width: style?.width || width,
             ...style,
+            width: containerWidth,
+            height: containerHeight,
           }}
           scrollEnabled={false}
           onLoadEnd={(): void => {
-            webref.injectJavaScript(guardAndCreateJS);
+            // webref.injectJavaScript(guardAndCreateJS);
+            createChart(optionsFinal, data);
           }}
           ref={(r) => {
             webref = r;

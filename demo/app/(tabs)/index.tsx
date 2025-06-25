@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { Platform, StyleSheet, SafeAreaView, Text } from 'react-native';
+import {
+  Platform,
+  StyleSheet,
+  SafeAreaView,
+  Text,
+  Dimensions,
+} from 'react-native';
 
 import ChartUPlot from 'uplot-react-native';
 
@@ -21,19 +27,6 @@ var data2 = makeData(n);
 var data3 = makeData(n);
 var count = n * 3;
 
-var options = {
-  id: 'chart',
-  width: 300,
-  height: 150,
-  scales: { x: { time: false } },
-  series: [{ label: 'Time' }, { label: 'Value', stroke: 'blue', width: 2 }],
-  axes: [{ scale: 'x' }, {}],
-};
-var style = {
-  width: 400,
-  height: 150,
-};
-
 export default function HomeScreen() {
   // create ref for chart
   const chartRef1 = useRef(null);
@@ -41,20 +34,29 @@ export default function HomeScreen() {
   const chartRef3 = useRef(null);
   const [nDataPoint, setNDataPoint] = useState(1);
 
+  var { width, height } = Dimensions.get('window');
+
   useEffect(() => {
-    setTimeout(() => {
-      setInterval(() => {
-        chartRef1.current?.pushData([n, Math.random() * 100]);
-        chartRef2.current?.pushData([n, Math.random() * 100]);
-        chartRef3.current?.pushData([n, Math.random() * 100]);
-        count = count + 3;
-        n = n + 1;
-      }, 10);
-    }, 10000);
+    setInterval(() => {
+      chartRef1.current?.pushData([n, Math.random() * 100]);
+      // chartRef2.current?.pushData([n, Math.random() * 100]);
+      // chartRef3.current?.pushData([n, Math.random() * 100]);
+      count = count + 3;
+      n = n + 1;
+    }, 1000);
     setInterval(() => {
       setNDataPoint(count);
     }, 1000);
   }, []);
+
+  var options = {
+    id: 'chart',
+    width: width,
+    height: height * 0.7,
+    scales: { x: { time: false } },
+    series: [{ label: 'Time' }, { label: 'Value', stroke: 'blue', width: 2 }],
+    axes: [{ scale: 'x' }, {}],
+  };
 
   return (
     <SafeAreaView
@@ -81,10 +83,13 @@ export default function HomeScreen() {
       <ChartUPlot
         data={data1}
         options={options}
-        style={style}
+        style={{
+          width: width,
+          height: height * 0.7,
+        }}
         ref={chartRef1}
       />
-      <ChartUPlot
+      {/* <ChartUPlot
         data={data2}
         options={options}
         style={style}
@@ -95,7 +100,7 @@ export default function HomeScreen() {
         options={options}
         style={style}
         ref={chartRef3}
-      />
+      /> */}
     </SafeAreaView>
   );
 }
