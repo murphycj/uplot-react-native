@@ -1,5 +1,11 @@
 # uplot-react-native
 
+## 0.1.4
+
+### Patch Changes
+
+- df61bf9: Fix styling
+
 ## 0.1.3
 
 ### Patch Changes
