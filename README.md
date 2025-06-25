@@ -24,7 +24,7 @@ yarn add uplot-react-native
 
 ## Usage
 
-Create a uPlot chart via `ChartUPlot`. The `data` and `options` props it takes are structured the same as when you call `new uPlot(options, data)`. You update the chart via a `ref`.
+Create a uPlot chart via `ChartUPlot`. The `data` and `options` props are structured the same as when you call `new uPlot(options, data)`. You update the chart via a `ref`.
 
 ```javascript
 import { useRef, useEffect } from 'react';
@@ -76,7 +76,7 @@ The `ref` exposes the following methods:
 - `setSize(width, height)`: Set the size of the chart.
 - `destroy()`: Destroy the chart instance.
 
-### Control plot dimensions
+### Plot dimensions
 
 You can set the width and height either through the uPlot `options` or by passing a `style` prop to the `ChartUPlot` component. If you set both, the uPlot `options` will take precedence.
 
