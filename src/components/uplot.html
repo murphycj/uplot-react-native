@@ -1,6 +1,27 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      function parseOptions(options) {
+        var parsed = JSON.parse(options, (k, v) => {
+          if (
+            typeof v === 'string' &&
+            (v.trim().startsWith('function') || v.includes('=>'))
+          ) {
+            const fnMatch = v.match(/^function\(\s*([^)]+)\s*\)$/);
+            if (fnMatch) {
+              return window[fnMatch[1]];
+            } else {
+              console.error(`Invalid function format: ${v}`);
+              return () => {};
+            }
+          }
+          return v;
+        });
+
+        return parsed;
+      }
+    </script>
     '{{UPLOT_CSS}}' '{{UPLOT_JS}}'
     <style>
       body {

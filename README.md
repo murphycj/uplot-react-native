@@ -76,13 +76,63 @@ The `ref` exposes the following methods:
 - `setSize(width, height)`: Set the size of the chart.
 - `destroy()`: Destroy the chart instance.
 
-### Plot dimensions
+### Dimensions
 
-You can set the width and height either through the uPlot `options` or by passing a `style` prop to the `ChartUPlot` component. If you set both, the uPlot `options` will take precedence.
+You can set the width and height either through the uPlot `options` or by passing a `style` prop to the `ChartUPlot` component. If you set both, the uPlot `options` will take precedence. Any changes to the width and height in the `options` will not automatically update the chart size.
 
-### Plot margins
+### Margins
 
 Margin for the title and legend will be subtracted from the final width and height for the chart. You can control the margin via the `margin: { title?: number; legend?: number }` prop.
+
+### Functions
+
+The uPlot options can include custom functions for things like drawing and formatting tick labels. You'll need to duplicate each function: one as a normal javascript function and another as a string for the webview. Pass any functions to the `functions` prop of `ChartUPlot`, which will be injected into the webview and can be used in the uPlot options.
+
+```javascript
+// for web version of uPlot
+function formatLabel(value) {
+  return value.toFixed(2);
+}
+
+// for iOS and Android version
+const formatLabelString = `
+function formatLabel(value) {
+  return value.toFixed(2);
+}
+`;
+
+const options = {
+  width: 300,
+  height: 300,
+  scales: { x: { time: false } },
+  series: [{ label: 'X' }, { label: 'Value', stroke: 'blue', width: 2 }],
+  axes: [
+      {
+        scale: 'x',
+        values: formatLabel,
+      },
+      {},
+    ],
+};
+
+<ChartUPlot
+  options={options}
+  functions={[formatLabelString]}
+  <!-- ... other props -->
+/>
+```
+
+#### Important!
+
+Any dependencies in each function must be:
+
+- One of the other functions passed to the `functions` prop.
+- A global variable that is defined in the webview.
+- A function from the uPlot library that is available in the webview.
+
+#### Why is it done this way?
+
+There may be a better way to do this, so please open an issue if you have a suggestion. Passing javascript functions to the webview is tricky, so the current solution is to pass them as strings into WebView's `injectedJavaScript` prop. This means if you're also supporting web, you need to duplicate each function to support both web and iOS/Android. If you didn't do this and instead tried doing something like `function.toString()` in an iOS build, it does not return the javascript source code.
 
 ## Demo app
 

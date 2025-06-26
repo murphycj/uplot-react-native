@@ -12,6 +12,7 @@ import { WebView } from 'react-native-webview';
 var isWeb = Platform.OS === 'web';
 
 import html from './uplot.html';
+
 import 'uplot/dist/uPlot.min.css';
 
 var uPlot: any = null;
@@ -21,6 +22,12 @@ if (isWeb) {
 
 const MARGIN_TITLE = 27; // Height of the title
 const MARGIN_LEGEND = 50; // Height of the legend
+
+const stringify = (obj: any): string => {
+  return JSON.stringify(obj, (_key, val) =>
+    typeof val === 'function' ? `function(${val.name || 'anonymous'})` : val,
+  );
+};
 
 /**
  * Calculate the dimensions for the uPlot chart based on options, style, and device dimensions.
@@ -72,8 +79,14 @@ export interface UPlotProps {
   options: any;
   /** Additional style for the container */
   style?: any;
+  /** any custom functions to be injected into the webview */
+  functions?: string[];
   /** Margin for the chart, useful for titles and legends */
   margin?: { title?: number; legend?: number };
+  /** Callback for messages from the WebView */
+  onMessage?: (event: any) => void;
+  /** Additional props for the WebView */
+  webviewProps?: any;
 }
 
 const ChartUPlot = forwardRef<any, UPlotProps>(
@@ -82,7 +95,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       data,
       options,
       style,
+      functions,
       margin = { title: MARGIN_TITLE, legend: MARGIN_LEGEND },
+      onMessage,
+      ...webviewProps
     },
     ref,
   ) => {
@@ -99,6 +115,13 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       return getDimensions(options, style, width, height, margin);
     }, [options, style, width, height]);
 
+    var injectFns = useMemo(() => {
+      if (!functions || functions.length === 0) {
+        return '';
+      }
+      return functions.join('\n');
+    }, [functions]);
+
     useEffect(() => {
       // update uplot height and width if options change
 
@@ -109,26 +132,15 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         });
       } else {
         webref?.injectJavaScript(`
-          window._chart.setSize(${JSON.stringify(containerWidth)}, ${JSON.stringify(containerHeight)});
+          if (window._chart) {
+            window._chart.setSize(${JSON.stringify(containerWidth)}, ${JSON.stringify(containerHeight)});
+          } else {
+            console.error('Chart not initialized');
+          }
           true;
         `);
       }
     }, [containerWidth, containerHeight]);
-
-    // const guardAndCreateJS = `
-    //     (function() {
-    //       if (window.__CHART_CREATED__) return;
-    //       window.__CHART_CREATED__ = true;
-
-    //       // stash your data and options on window
-    //       window._data = ${JSON.stringify(data)};
-    //       window._opts = ${JSON.stringify(options)};
-
-    //       // now actually construct uPlot
-    //       window._chart = new uPlot(window._opts, window._data, document.getElementById('chart'));
-    //     })();
-    //     true;
-    //   `;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const createChart = useCallback(
@@ -146,8 +158,12 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             : '';
           webref?.injectJavaScript(
             `${bgJS}
+
+          console.debug('Creating uPlot chart...');
+
           window._data = ${JSON.stringify(data)};
-          window._opts = ${JSON.stringify(opts)};
+          window._opts = parseOptions('${stringify(opts)}');
+
           window._chart = new uPlot(window._opts, window._data, document.getElementById("chart"));
           true;
           `,
@@ -163,8 +179,12 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         uplotInstance.current?.setData(newData);
       } else {
         webref?.injectJavaScript(`
-          window._data = ${JSON.stringify(newData)};
-          window._chart.setData(window._data);
+          if (window._chart) {
+            window._data = ${JSON.stringify(newData)};
+            window._chart.setData(window._data);
+          } else {
+            console.error('Chart not initialized');
+          }
           true;
           `);
       }
@@ -194,7 +214,13 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           for (let i = 0; i < item.length; i++) {
             window._data[i].push(item[i]);
           }
-          window._chart.setData(window._data);true;`);
+          if (window._chart) {
+            window._chart.setData(window._data);
+          } else {
+            console.error('Chart not initialized');
+          }
+          true;
+        `);
       }
     }, []);
 
@@ -204,7 +230,12 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         uplotInstance.current?.setScale(axis, options);
       } else {
         webref?.injectJavaScript(`
-          window._chart.setScale(${JSON.stringify(axis)}, ${JSON.stringify(options)});true;
+          if (window._chart) {
+            window._chart.setScale(${JSON.stringify(axis)}, ${JSON.stringify(options)});true;
+          } else {
+            console.error('Chart not initialized');
+          }
+          true;
         `);
       }
     }, []);
@@ -214,9 +245,14 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       if (isWeb) {
         uplotInstance.current?.setSize(width, height);
       } else {
-        webref?.injectJavaScript(
-          `window._chart.setSize(${JSON.stringify(width)}, ${JSON.stringify(height)});true;`,
-        );
+        webref?.injectJavaScript(`
+          if (!window._chart) {
+            window._chart.setSize(${JSON.stringify(width)}, ${JSON.stringify(height)});true;
+          } else {
+            console.error('Chart not initialized');
+          }
+          true;
+        `);
       }
     }, []);
 
@@ -225,7 +261,14 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       if (isWeb) {
         uplotInstance.current?.destroy();
       } else {
-        webref?.injectJavaScript('window._chart.destroy();true;');
+        webref?.injectJavaScript(`
+          if (window._chart) {
+            window._chart.destroy();true;
+          } else {
+            console.error('Chart not initialized');
+          }
+          true;
+        `);
       }
     }, []);
 
@@ -257,6 +300,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     } else {
       return (
         <WebView
+          {...webviewProps}
           originWhitelist={['*']}
           source={html}
           style={{
@@ -273,6 +317,41 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             webref = r;
           }}
           javaScriptEnabled={true}
+          injectedJavaScript={`
+            const consoleLog = (type, log) => window.ReactNativeWebView.postMessage(JSON.stringify({'type': 'Console', 'data': {'type': type, 'log': log}}));
+            console = {
+                log: (log) => consoleLog('log', log),
+                debug: (log) => consoleLog('debug', log),
+                info: (log) => consoleLog('info', log),
+                warn: (log) => consoleLog('warn', log),
+                error: (log) => consoleLog('error', log),
+              };
+
+            ${injectFns}
+            true;
+          `}
+          onMessage={(payload): void => {
+            // in webviewProps, if onMessage is provided, call it with the payload
+            if (onMessage) {
+              onMessage(payload);
+              return;
+            }
+
+            // Handle messages from the webview if needed
+            // console.log('Message from webview:', event.nativeEvent.data);
+            let dataPayload;
+            try {
+              dataPayload = JSON.parse(payload.nativeEvent.data);
+            } catch (e) {}
+
+            if (dataPayload) {
+              if (dataPayload.type === 'Console') {
+                console.info(`[Console] ${JSON.stringify(dataPayload.data)}`);
+              } else {
+                console.log(dataPayload);
+              }
+            }
+          }}
         />
       );
     }

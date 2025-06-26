@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import {
-  Platform,
-  StyleSheet,
-  SafeAreaView,
-  Text,
-  Dimensions,
-} from 'react-native';
+import { StyleSheet, SafeAreaView, Text, Dimensions } from 'react-native';
 
 import ChartUPlot from 'uplot-react-native';
 
@@ -20,6 +14,19 @@ var makeData = (points = 1000) => {
 
   return [xs, ys] as [number[], number[]];
 };
+
+function format_value(self, ticks) {
+  return ticks.map((val) => {
+    return 2;
+  });
+}
+var format_value_src = `
+function format_value(self, ticks) {
+  return ticks.map((val) => {
+    return 2;
+  });
+};
+`;
 
 var n = 500;
 var data1 = makeData(n);
@@ -54,9 +61,26 @@ export default function HomeScreen() {
     width: width,
     height: height * 0.7,
     scales: { x: { time: false } },
-    series: [{ label: 'Time' }, { label: 'Value', stroke: 'blue', width: 2 }],
-    axes: [{ scale: 'x' }, {}],
+    series: [
+      {
+        label: 'Time',
+      },
+      { label: 'Value', stroke: 'blue', width: 2 },
+    ],
+    axes: [
+      {
+        scale: 'x',
+        ticks: {
+          stroke: 'black',
+          width: 2,
+        },
+        values: format_value,
+      },
+      {},
+    ],
   };
+
+  var functions = [format_value];
 
   return (
     <SafeAreaView
@@ -88,6 +112,7 @@ export default function HomeScreen() {
           height: height * 0.7,
         }}
         ref={chartRef1}
+        functions={[format_value_src]}
       />
       {/* <ChartUPlot
         data={data2}
