@@ -86,18 +86,22 @@ Margin for the title and legend will be subtracted from the final width and heig
 
 ### Functions
 
-The uPlot options can include custom functions for things like drawing and formatting tick labels. You'll need to duplicate each function: one as a normal javascript function and another as a string for the webview. Pass any functions to the `functions` prop of `ChartUPlot`, which will be injected into the webview and can be used in the uPlot options.
+If you have custom functions within your uPlot `options`, have them defined elsewhere; do not use inline functions. Then to make use of them on iOS and Android version, wrap all functions into a single string to pass them to the ChartUPlot's `injectedJavaScript` prop.
 
 ```javascript
 // for web version of uPlot
-function formatLabel(value) {
-  return value.toFixed(2);
+function format_value(self, ticks) {
+  return ticks.map((val) => {
+    return 2;
+  });
 }
 
 // for iOS and Android version
-const formatLabelString = `
-function formatLabel(value) {
-  return value.toFixed(2);
+const injectedJavaScript = `
+function format_value(self, ticks) {
+  return ticks.map((val) => {
+    return 2;
+  });
 }
 `;
 
@@ -107,32 +111,28 @@ const options = {
   scales: { x: { time: false } },
   series: [{ label: 'X' }, { label: 'Value', stroke: 'blue', width: 2 }],
   axes: [
-      {
-        scale: 'x',
-        values: formatLabel,
-      },
-      {},
-    ],
+    {
+      scale: 'x',
+      values: format_value,
+    },
+    {},
+  ],
 };
 
-<ChartUPlot
-  options={options}
-  functions={[formatLabelString]}
-  <!-- ... other props -->
-/>
+<ChartUPlot options={options} injectedJavaScript={injectedJavaScript} />;
 ```
 
 #### Important!
 
 Any dependencies in each function must be:
 
-- One of the other functions passed to the `functions` prop.
-- A global variable that is defined in the webview.
+- One of the other functions passed to the `injectedJavaScript` prop.
+- Anything globally available within a WebView.
 - A function from the uPlot library that is available in the webview.
 
 #### Why is it done this way?
 
-There may be a better way to do this, so please open an issue if you have a suggestion. Passing javascript functions to the webview is tricky, so the current solution is to pass them as strings into WebView's `injectedJavaScript` prop. This means if you're also supporting web, you need to duplicate each function to support both web and iOS/Android. If you didn't do this and instead tried doing something like `function.toString()` in an iOS build, it does not return the javascript source code.
+There may be a better way to do this, so please open an issue if you have a suggestion. Passing javascript functions to the webview is tricky, so the current solution is to pass them as strings into WebView's `injectedJavaScript` prop. This means if you're also supporting web, you need to duplicate each function to support both web and iOS/Android. You could argue that you can try something like, `function.toString()`, but in iOS build `toString()` does not actually return the javascript source code, so it won't work.
 
 ## Demo app
 
@@ -151,6 +151,10 @@ npx expo run:ios
 # for development build on a physical device
 eas build --profile development --platform ios --local
 ```
+
+## Tips
+
+1. Don't create inline props to the `ChartUPlot` component, otherwise uPlot instance may get out of sync with the rendered component. Instead, use a `useMemo` hook to memoize the options and data.
 
 ## Contributing
 
