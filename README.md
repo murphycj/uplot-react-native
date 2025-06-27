@@ -88,6 +88,12 @@ Margin for the title and legend will be subtracted from the final width and heig
 
 If you have custom functions within your uPlot `options`, have them defined elsewhere; do not use inline functions. Then to make use of them on iOS and Android version, wrap all functions into a single string to pass them to the ChartUPlot's `injectedJavaScript` prop.
 
+Any dependencies in each function must be:
+
+- One of the other functions passed to the `injectedJavaScript` prop.
+- Anything globally available within a WebView.
+- A function from the uPlot library that is available in the webview.
+
 ```javascript
 // for web version of uPlot
 function format_value(self, ticks) {
@@ -121,14 +127,6 @@ const options = {
 
 <ChartUPlot options={options} injectedJavaScript={injectedJavaScript} />;
 ```
-
-#### Important!
-
-Any dependencies in each function must be:
-
-- One of the other functions passed to the `injectedJavaScript` prop.
-- Anything globally available within a WebView.
-- A function from the uPlot library that is available in the webview.
 
 #### Why is it done this way?
 
