@@ -9,11 +9,9 @@ import React, {
 import { Platform, useWindowDimensions, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-var isWeb = Platform.OS === 'web';
-
 import html from './uplot.html';
-
 import 'uplot/dist/uPlot.min.css';
+var isWeb = Platform.OS === 'web';
 
 var uPlot: any = null;
 if (isWeb) {
@@ -72,6 +70,37 @@ function getDimensions(
   return { optionsFinal, containerWidth, containerHeight };
 }
 
+function getCreateChartString(
+  data: number[][],
+  options: any,
+  bgColor: string = 'transparent',
+  injectedJavaScript: string = '',
+): string {
+  return `
+    (function() {
+      if (window.__CHART_CREATED__) return;
+      window.__CHART_CREATED__ = true;
+
+      // inject custom functions if provided
+      ${injectedJavaScript}
+
+      document.body.style.backgroundColor='${bgColor}';
+
+      // stash your data and options on window
+      window._data = ${JSON.stringify(data)};
+      window._opts = parseOptions('${stringify(options)}');
+
+      // inject background color before chart setup if provided
+      if ('${bgColor}') {
+        document.body.style.backgroundColor='${bgColor}';
+      }
+      // now actually construct uPlot
+      window._chart = new uPlot(window._opts, window._data, document.getElementById('chart'));
+    })();
+    true;
+  `;
+}
+
 export interface UPlotProps {
   /** uPlot data array: [xValues[], series1[], series2[], ...] */
   data: [number[], ...number[][]];
@@ -79,12 +108,14 @@ export interface UPlotProps {
   options: any;
   /** Additional style for the container */
   style?: any;
-  /** any custom functions to be injected into the webview */
-  functions?: string[];
+  /** any custom functions to be injected into the webview (Function or source string) */
+  functions?: Array<Function | string>;
   /** Margin for the chart, useful for titles and legends */
   margin?: { title?: number; legend?: number };
   /** Callback for messages from the WebView */
   onMessage?: (event: any) => void;
+  /** JavaScript to be injected into the WebView */
+  injectedJavaScript?: string;
   /** Additional props for the WebView */
   webviewProps?: any;
 }
@@ -98,6 +129,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       functions,
       margin = { title: MARGIN_TITLE, legend: MARGIN_LEGEND },
       onMessage,
+      injectedJavaScript = '',
       ...webviewProps
     },
     ref,
@@ -116,10 +148,11 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     }, [options, style, width, height]);
 
     var injectFns = useMemo(() => {
-      if (!functions || functions.length === 0) {
-        return '';
-      }
-      return functions.join('\n');
+      if (!functions || functions.length === 0) return '';
+      // convert functions to string if needed
+      return functions
+        .map((fn) => (typeof fn === 'function' ? fn.toString() : fn))
+        .join('\n');
     }, [functions]);
 
     useEffect(() => {
@@ -144,7 +177,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const createChart = useCallback(
-      (opts: any, data: number[][]): void => {
+      (opts: any, data: number[][], bgColor?: string): void => {
         if (initialized.current) {
           return;
         }
@@ -153,25 +186,12 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           uplotInstance.current = new uPlot(opts, data, webref);
         } else {
           // inject background color before chart setup if provided
-          const bgJS = bgColor
-            ? `document.body.style.backgroundColor='${bgColor}';`
-            : '';
-          webref?.injectJavaScript(
-            `${bgJS}
 
-          console.debug('Creating uPlot chart...');
-
-          window._data = ${JSON.stringify(data)};
-          window._opts = parseOptions('${stringify(opts)}');
-
-          window._chart = new uPlot(window._opts, window._data, document.getElementById("chart"));
-          true;
-          `,
-          );
+          webref?.injectJavaScript(getCreateChartString(data, opts, bgColor));
         }
         initialized.current = true;
       },
-      [bgColor],
+      [],
     );
 
     const setData = useCallback((newData: number[][]): void => {
@@ -310,26 +330,13 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           }}
           scrollEnabled={false}
           onLoadEnd={(): void => {
-            // webref.injectJavaScript(guardAndCreateJS);
-            createChart(optionsFinal, data);
+            createChart(optionsFinal, data, bgColor);
           }}
           ref={(r) => {
             webref = r;
           }}
           javaScriptEnabled={true}
-          injectedJavaScript={`
-            const consoleLog = (type, log) => window.ReactNativeWebView.postMessage(JSON.stringify({'type': 'Console', 'data': {'type': type, 'log': log}}));
-            console = {
-                log: (log) => consoleLog('log', log),
-                debug: (log) => consoleLog('debug', log),
-                info: (log) => consoleLog('info', log),
-                warn: (log) => consoleLog('warn', log),
-                error: (log) => consoleLog('error', log),
-              };
-
-            ${injectFns}
-            true;
-          `}
+          injectedJavaScript={`${injectedJavaScript}; true;`}
           onMessage={(payload): void => {
             // in webviewProps, if onMessage is provided, call it with the payload
             if (onMessage) {
