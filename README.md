@@ -154,6 +154,8 @@ eas build --profile development --platform ios --local
 
 1. Don't create inline props to the `ChartUPlot` component, otherwise uPlot instance may get out of sync with the rendered component. Instead, use a `useMemo` hook to memoize the options and data.
 
+2. The functions you pass to the `injectedJavaScript` can be tricky to debug, so be sure to test them in a web environment first.
+
 ## Contributing
 
 If you would like to contribute, please open an issue or a pull request. Contributions are welcome!
