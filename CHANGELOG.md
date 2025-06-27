@@ -1,5 +1,11 @@
 # uplot-react-native
 
+## 0.1.5
+
+### Patch Changes
+
+- 939a80d: improve injecting functions
+
 ## 0.1.4
 
 ### Patch Changes
