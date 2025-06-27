@@ -130,7 +130,7 @@ const options = {
 
 #### Why is it done this way?
 
-There may be a better way to do this, so please open an issue if you have a suggestion. Passing javascript functions to the webview is tricky, so the current solution is to pass them as strings into WebView's `injectedJavaScript` prop. This means if you're also supporting web, you need to duplicate each function to support both web and iOS/Android. You could argue that you can try something like, `function.toString()`, but in iOS build `toString()` does not actually return the javascript source code, so it won't work.
+There may be a better way to do this, so please open an issue if you have a suggestion. Passing javascript functions to the webview is tricky, so the current solution is to pass them as strings into WebView's `injectedJavaScript` prop. You might suggest doing something like, `function.toString()`, but in iOS build `toString()` does not actually return the javascript source code, so it won't work.
 
 ## Demo app
 
