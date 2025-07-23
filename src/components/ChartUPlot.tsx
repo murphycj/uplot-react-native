@@ -169,7 +169,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           return;
         }
 
-        webref?.injectJavaScript(`
+        webref.current.injectJavaScript(`
           if (window._chart) {
             window._chart.setSize(${JSON.stringify(containerWidth)}, ${JSON.stringify(containerHeight)});
           } else {
@@ -191,8 +191,14 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           uplotInstance.current = new uPlot(opts, data, webref);
         } else {
           // inject background color before chart setup if provided
+          if (!webref) {
+            console.error('WebView reference is not set');
+            return;
+          }
 
-          webref?.injectJavaScript(getCreateChartString(data, opts, bgColor));
+          webref.current.injectJavaScript(
+            getCreateChartString(data, opts, bgColor),
+          );
         }
         initialized.current = true;
       },
@@ -208,7 +214,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           return;
         }
 
-        webref?.injectJavaScript(`
+        webref.current.injectJavaScript(`
           if (window._chart) {
             console.debug('Setting new data for uPlot chart');
             window._data = ${JSON.stringify(newData)};
@@ -237,7 +243,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           return;
         }
 
-        webref?.injectJavaScript(`
+        webref.current.injectJavaScript(`
           var item = ${JSON.stringify(item)};
 
           if (!window._data) {
@@ -271,7 +277,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           return;
         }
 
-        webref?.injectJavaScript(`
+        webref.current.injectJavaScript(`
           if (window._chart) {
             window._chart.setScale(${JSON.stringify(axis)}, ${JSON.stringify(options)});true;
           } else {
@@ -287,7 +293,12 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       if (isWeb) {
         uplotInstance.current?.setSize(width, height);
       } else {
-        webref?.injectJavaScript(`
+        if (!webref) {
+          console.error('WebView reference is not set');
+          return;
+        }
+
+        webref.current.injectJavaScript(`
           if (!window._chart) {
             window._chart.setSize(${JSON.stringify(width)}, ${JSON.stringify(height)});true;
           } else {
@@ -303,7 +314,12 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       if (isWeb) {
         uplotInstance.current?.destroy();
       } else {
-        webref?.injectJavaScript(`
+        if (!webref) {
+          console.error('WebView reference is not set');
+          return;
+        }
+
+        webref.current.injectJavaScript(`
           if (window._chart) {
             window._chart.destroy();true;
           } else {
@@ -322,6 +338,8 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       setSize,
       destroy,
     }));
+
+    console.log('webref:', webref);
 
     if (Platform.OS === 'web') {
       return (
@@ -355,7 +373,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             createChart(optionsFinal, data, bgColor);
           }}
           ref={(r) => {
-            webref = r;
+            if (r) {
+              console.log('!!WebView ref:', r);
+              webref.current = r;
+            }
           }}
           javaScriptEnabled={true}
           injectedJavaScript={`${injectedJavaScript}; true;`}
