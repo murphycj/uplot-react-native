@@ -164,6 +164,11 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           height: containerHeight,
         });
       } else {
+        if (!webref) {
+          console.error('WebView reference is not set');
+          return;
+        }
+
         webref?.injectJavaScript(`
           if (window._chart) {
             window._chart.setSize(${JSON.stringify(containerWidth)}, ${JSON.stringify(containerHeight)});
@@ -198,8 +203,14 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       if (isWeb) {
         uplotInstance.current?.setData(newData);
       } else {
+        if (!webref) {
+          console.error('WebView reference is not set');
+          return;
+        }
+
         webref?.injectJavaScript(`
           if (window._chart) {
+            console.debug('Setting new data for uPlot chart');
             window._data = ${JSON.stringify(newData)};
             window._chart.setData(window._data);
           } else {
@@ -221,6 +232,11 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
         uplotInstance.current?.setData(dataRef.current);
       } else {
+        if (!webref) {
+          console.error('WebView reference is not set');
+          return;
+        }
+
         webref?.injectJavaScript(`
           var item = ${JSON.stringify(item)};
 
@@ -235,6 +251,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             window._data[i].push(item[i]);
           }
           if (window._chart) {
+            console.debug('Pushing new data to uPlot chart');
             window._chart.setData(window._data);
           } else {
             console.error('Chart not initialized');
@@ -249,6 +266,11 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       if (isWeb) {
         uplotInstance.current?.setScale(axis, options);
       } else {
+        if (!webref) {
+          console.error('WebView reference is not set');
+          return;
+        }
+
         webref?.injectJavaScript(`
           if (window._chart) {
             window._chart.setScale(${JSON.stringify(axis)}, ${JSON.stringify(options)});true;
