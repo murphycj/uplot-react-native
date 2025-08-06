@@ -185,14 +185,6 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       return getDimensions(options, style, width, height, margin);
     }, [options, style, width, height]);
 
-    var injectFns = useMemo(() => {
-      if (!functions || functions.length === 0) return '';
-      // convert functions to string if needed
-      return functions
-        .map((fn) => (typeof fn === 'function' ? fn.toString() : fn))
-        .join('\n');
-    }, [functions]);
-
     useEffect(() => {
       // update uplot height and width if options change
 
