@@ -176,7 +176,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const { width, height } = useWindowDimensions();
     let webref: any = useRef(null);
     const uplotInstance = useRef<any>(null);
-    const dataRef = useRef(data);
+    const dataRef = useRef<number[][]>(data as number[][]);
     const initialized = useRef(false);
 
     const bgColor = style?.backgroundColor || 'transparent';
@@ -387,7 +387,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           return;
         }
 
-        window[name] = value;
+        (window as any)[name] = value;
       } else {
         if (!webref) {
           console.error('WebView reference is not set');
