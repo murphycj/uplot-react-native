@@ -28,6 +28,44 @@ const stringify = (obj: any): string => {
 };
 
 /**
+ * Slices a multi-series dataset to only the window where the given axis lies within [min, max].
+ *
+ * @param {number[][]} data   - Array of N series, each an array of equal length.
+ *                              One of these series at index `axis` is the “axis” to window on.
+ * @param {number}   axis     - Index of the axis-series in `data`.
+ * @param {number}   min      - Inclusive lower bound on axis values.
+ * @param {number}   max      - Inclusive upper bound on axis values.
+ * @returns {number[][]}      - A new array of N series, each sliced to the [start..end] window.
+ */
+function _sliceSeries(
+  data: number[][],
+  axis: number,
+  min: number,
+  max: number,
+): number[][] {
+  const axisData = data[axis];
+  let start = -1,
+    end = -1;
+
+  // find the first and last indices where axisData[i] ∈ [min, max]
+  for (let i = 0; i < axisData.length; i++) {
+    const v = axisData[i];
+    if (v >= min && v <= max) {
+      if (start === -1) start = i;
+      end = i;
+    }
+  }
+
+  // if nothing falls in the range, return empty arrays
+  if (start === -1) {
+    return data.map(() => []);
+  }
+
+  // slice each series to [start .. end]
+  return data.map((series) => series.slice(start, end + 1));
+}
+
+/**
  * Calculate the dimensions for the uPlot chart based on options, style, and device dimensions.
  * Adjusts for title and legend margins if they are present.
  */
@@ -53,14 +91,14 @@ function getDimensions(
 
   if (options?.title) {
     // Subtract height for title
-    uplotHeight -= margin.title || MARGIN_TITLE;
+    uplotHeight -= margin?.title != undefined ? margin.title : MARGIN_TITLE;
   }
 
   if (options?.legend?.show) {
     // do nothing
   } else {
     // Subtract height for legend
-    uplotHeight -= margin.legend || MARGIN_LEGEND;
+    uplotHeight -= margin?.legend != undefined ? margin.legend : MARGIN_LEGEND;
   }
 
   var optionsFinal = { ...options };
@@ -267,6 +305,58 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       }
     }, []);
 
+    /**
+     * Slices a multi-series dataset to only the window where the given axis lies within [min, max].
+     *
+     * @param {number[][]} data   - Array of N series, each an array of equal length.
+     *                              One of these series at index `axis` is the “axis” to window on.
+     * @param {number}   axis     - Index of the axis-series in `data`.
+     * @param {number}   min      - Inclusive lower bound on axis values.
+     * @param {number}   max      - Inclusive upper bound on axis values.
+     * @returns {number[][]}      - A new array of N series, each sliced to the [start..end] window.
+     */
+    const sliceSeries = useCallback(
+      (axis: number, min: number, max: number): void => {
+        if (isWeb) {
+          // Slice the data arrays
+          dataRef.current = _sliceSeries(dataRef.current, axis, min, max);
+
+          if (!uplotInstance.current) {
+            console.error('uPlot instance is not initialized');
+            return;
+          }
+          // Update the uPlot instance with the new data
+          uplotInstance.current.setData(dataRef.current);
+        } else {
+          if (!webref) {
+            console.error('WebView reference is not set');
+            return;
+          }
+          webref.current.injectJavaScript(`
+            var axis = ${JSON.stringify(axis)};
+            var min = ${JSON.stringify(min)};
+            var max = ${JSON.stringify(max)};
+
+            if (!winow._chart) {
+              console.error('Chart not initialized');
+              return;
+            }
+            
+            if (!window._data || !window._data[axis]) {
+              console.error('Data not initialized or axis out of bounds');
+              return;
+            }
+
+            // call sliceSeries function, which we assume is already defined in the webview
+            window._data = sliceSeries(window._data, axis, min, max);
+            window._chart.setData(window._data);
+            true;
+          `);
+        }
+      },
+      [],
+    );
+
     // function to call setScale
     const setScale = useCallback((axis: string, options: any): void => {
       if (isWeb) {
@@ -285,6 +375,33 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           }
           true;
         `);
+      }
+    }, []);
+
+    // if web, sets the variable to window.[name]
+    // if native, sets the variable to window.[name] via webref.current.injectJavaScript
+    const setVariable = useCallback((name: string, value: any): void => {
+      if (isWeb) {
+        if (!window) {
+          console.error('Window is not defined');
+          return;
+        }
+
+        window[name] = value;
+      } else {
+        if (!webref) {
+          console.error('WebView reference is not set');
+          return;
+        }
+
+        webref.current.injectJavaScript(`
+            if (window._chart) {
+              window.${name} = ${JSON.stringify(value)};
+            } else {
+              console.error('Chart not initialized');
+            }
+            true;
+          `);
       }
     }, []);
 
@@ -334,7 +451,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       createChart,
       setData,
       pushData,
+      sliceSeries,
       setScale,
+      setVariable,
       setSize,
       destroy,
     }));

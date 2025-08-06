@@ -33,6 +33,39 @@
 
         return parsed;
       }
+
+      /**
+       * Slices a multi-series dataset to only the window where the given axis lies within [min, max].
+       *
+       * @param {number[][]} data   - Array of N series, each an array of equal length.
+       *                              One of these series at index `axis` is the “axis” to window on.
+       * @param {number}   axis     - Index of the axis-series in `data`.
+       * @param {number}   min      - Inclusive lower bound on axis values.
+       * @param {number}   max      - Inclusive upper bound on axis values.
+       * @returns {number[][]}      - A new array of N series, each sliced to the [start..end] window.
+       */
+      function sliceSeries(data, axis, min, max) {
+        const axisData = data[axis];
+        let start = -1,
+          end = -1;
+
+        // find the first and last indices where axisData[i] ∈ [min, max]
+        for (let i = 0; i < axisData.length; i++) {
+          const v = axisData[i];
+          if (v >= min && v <= max) {
+            if (start === -1) start = i;
+            end = i;
+          }
+        }
+
+        // if nothing falls in the range, return empty arrays
+        if (start === -1) {
+          return data.map(() => []);
+        }
+
+        // slice each series to [start .. end]
+        return data.map((series) => series.slice(start, end + 1));
+      }
     </script>
     '{{UPLOT_CSS}}' '{{UPLOT_JS}}'
     <style>
