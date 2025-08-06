@@ -109,34 +109,41 @@ function getDimensions(
 }
 
 function getCreateChartString(
-  data: number[][],
+  data: number[][] | null,
   options: any,
   bgColor: string = 'transparent',
   injectedJavaScript: string = '',
 ): string {
+  // Prepare data assignment only if data is not null
+  const dataAssignment =
+    data !== null ? `window._data = ${JSON.stringify(data)};` : '';
+
+  const chartCreatedCheck =
+    data !== null ? `if (window.__CHART_CREATED__) return;` : ``;
+
   return `
-    (function() {
-      if (window.__CHART_CREATED__) return;
-      window.__CHART_CREATED__ = true;
+      (function() {
+        ${chartCreatedCheck}
+        window.__CHART_CREATED__ = true;
 
-      // inject custom functions if provided
-      ${injectedJavaScript}
+        // inject custom functions if provided
+        ${injectedJavaScript}
 
-      document.body.style.backgroundColor='${bgColor}';
-
-      // stash your data and options on window
-      window._data = ${JSON.stringify(data)};
-      window._opts = parseOptions('${stringify(options)}');
-
-      // inject background color before chart setup if provided
-      if ('${bgColor}') {
         document.body.style.backgroundColor='${bgColor}';
-      }
-      // now actually construct uPlot
-      window._chart = new uPlot(window._opts, window._data, document.getElementById('chart'));
-    })();
-    true;
-  `;
+
+        // stash your data on window if provided
+        ${dataAssignment}
+
+        // stash options on window
+        window._opts = parseOptions('${stringify(options)}');
+
+        if (window._chart) window._chart.destroy();
+
+        // now actually construct uPlot
+        window._chart = new uPlot(window._opts, window._data, document.getElementById('chart'));
+      })();
+      true;
+    `;
 }
 
 export interface UPlotProps {
@@ -194,7 +201,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           height: containerHeight,
         });
       } else {
-        if (!webref) {
+        if (!webref.current) {
           console.error('WebView reference is not set');
           return;
         }
@@ -218,10 +225,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         }
 
         if (isWeb) {
-          uplotInstance.current = new uPlot(opts, data, webref);
+          uplotInstance.current = new uPlot(opts, data, webref.current);
         } else {
           // inject background color before chart setup if provided
-          if (!webref) {
+          if (!webref?.current) {
             console.error('WebView reference is not set');
             return;
           }
@@ -235,11 +242,44 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       [],
     );
 
+    /**
+     * Update the uPlot chart options.
+     * It will create a new uPlot instance with the new options if the chart is already initialized.
+     *
+     * @param {Object} newOptions - The new options to set for the chart.
+     */
+    const updateOptions = useCallback((newOptions: any): void => {
+      if (isWeb) {
+        if (uplotInstance.current) {
+          uplotInstance.current.destroy();
+        }
+
+        uplotInstance.current = new uPlot(
+          newOptions,
+          dataRef.current,
+          webref.current,
+        );
+      } else {
+        if (!webref?.current) {
+          console.error('WebView reference is not set');
+          return;
+        }
+
+        webref.current.injectJavaScript(getCreateChartString(null, newOptions));
+      }
+    }, []);
+
+    /**
+     * Set the data for the uPlot chart.
+     * If the chart is not initialized, it will be created with the new data.
+     *
+     * @param {number[][]} newData - The new data to set for the chart.
+     */
     const setData = useCallback((newData: number[][]): void => {
       if (isWeb) {
         uplotInstance.current?.setData(newData);
       } else {
-        if (!webref) {
+        if (!webref?.current) {
           console.error('WebView reference is not set');
           return;
         }
@@ -268,7 +308,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
         uplotInstance.current?.setData(dataRef.current);
       } else {
-        if (!webref) {
+        if (!webref?.current) {
           console.error('WebView reference is not set');
           return;
         }
@@ -320,7 +360,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           // Update the uPlot instance with the new data
           uplotInstance.current.setData(dataRef.current);
         } else {
-          if (!webref) {
+          if (!webref?.current) {
             console.error('WebView reference is not set');
             return;
           }
@@ -328,20 +368,15 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             var axis = ${JSON.stringify(axis)};
             var min = ${JSON.stringify(min)};
             var max = ${JSON.stringify(max)};
-
-            if (!winow._chart) {
-              console.error('Chart not initialized');
-              return;
-            }
             
-            if (!window._data || !window._data[axis]) {
-              console.error('Data not initialized or axis out of bounds');
-              return;
+            if (window._chart && window._data && window._data[axis]) {
+              // call sliceSeries function, which we assume is already defined in the webview
+              window._data = sliceSeries(window._data, axis, min, max);
+              window._chart.setData(window._data);
+            } else {
+              console.error('Chart not initialized or data not available');
             }
 
-            // call sliceSeries function, which we assume is already defined in the webview
-            window._data = sliceSeries(window._data, axis, min, max);
-            window._chart.setData(window._data);
             true;
           `);
         }
@@ -354,7 +389,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       if (isWeb) {
         uplotInstance.current?.setScale(axis, options);
       } else {
-        if (!webref) {
+        if (!webref?.current) {
           console.error('WebView reference is not set');
           return;
         }
@@ -381,7 +416,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
         (window as any)[name] = value;
       } else {
-        if (!webref) {
+        if (!webref?.current) {
           console.error('WebView reference is not set');
           return;
         }
@@ -418,17 +453,24 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       }
     }, []);
 
-    // function to call destroy
+    // function to call destroy, also clears the data
     const destroy = useCallback((): void => {
       if (isWeb) {
         uplotInstance.current?.destroy();
       } else {
-        if (!webref) {
+        if (!webref?.current) {
           console.error('WebView reference is not set');
           return;
         }
 
         webref.current.injectJavaScript(`
+
+          // destroy data
+          if (window._data) {
+            window._data = [];
+          }
+
+          // destroy chart
           if (window._chart) {
             window._chart.destroy();true;
           } else {
@@ -441,6 +483,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
     useImperativeHandle(ref, () => ({
       createChart,
+      updateOptions,
       setData,
       pushData,
       sliceSeries,
@@ -450,13 +493,11 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       destroy,
     }));
 
-    console.log('webref:', webref);
-
     if (Platform.OS === 'web') {
       return (
         <View
           ref={(r): any => {
-            webref = r;
+            webref.current = r;
             if (r) {
               createChart(optionsFinal, data);
             }
@@ -485,7 +526,6 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           }}
           ref={(r) => {
             if (r) {
-              console.log('!!WebView ref:', r);
               webref.current = r;
             }
           }}
