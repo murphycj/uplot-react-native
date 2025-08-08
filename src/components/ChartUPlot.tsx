@@ -27,6 +27,36 @@ const stringify = (obj: any): string => {
   );
 };
 
+type AnyTypedArray =
+  | Int8Array
+  | Uint8Array
+  | Uint8ClampedArray
+  | Int16Array
+  | Uint16Array
+  | Int32Array
+  | Uint32Array
+  | Float32Array
+  | Float64Array
+  | BigInt64Array
+  | BigUint64Array;
+
+function isTypedArray(x: unknown): x is AnyTypedArray {
+  return ArrayBuffer.isView(x) && !(x instanceof DataView);
+}
+
+/**
+ * Converts typed arrays to plain arrays for JSON serialization.
+ * This is necessary because typed arrays cannot be directly serialized to JSON.
+ *
+ * @param {Array} arrays - Array of arrays, which may include typed arrays.
+ * @returns {Array} - A new array with all typed arrays converted to plain arrays.
+ */
+function toPlainArrays(arrays: any[]): any[] {
+  return arrays.map((arr) =>
+    isTypedArray(arr) ? Array.from(arr as ArrayLike<number | bigint>) : arr,
+  );
+}
+
 /**
  * Slices a multi-series dataset to only the window where the given axis lies within [min, max].
  *
@@ -285,9 +315,15 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         }
 
         webref.current.injectJavaScript(`
+          var item = ${JSON.stringify(toPlainArrays(newData))};
+
           if (window._chart) {
-            console.debug('Setting new data for uPlot chart');
-            window._data = ${JSON.stringify(newData)};
+            window._data = item;
+            var size = [
+              item.length,
+              item[0].length,
+              item[1].length,
+            ]
             window._chart.setData(window._data);
           } else {
             console.error('Chart not initialized');
