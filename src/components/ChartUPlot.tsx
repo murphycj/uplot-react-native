@@ -307,7 +307,8 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      */
     const setData = useCallback((newData: number[][]): void => {
       if (isWeb) {
-        uplotInstance.current?.setData(newData);
+        dataRef.current = newData;
+        uplotInstance.current?.setData(dataRef.current);
       } else {
         if (!webref?.current) {
           console.error('WebView reference is not set');
@@ -338,6 +339,13 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      */
     const pushData = useCallback((item: number[]): void => {
       if (isWeb) {
+        if (!dataRef.current || dataRef.current.length !== item.length) {
+          dataRef.current = [];
+          for (let i = 0; i < item.length; i++) {
+            dataRef.current.push([]);
+          }
+        }
+
         for (let i = 0; i < item.length; i++) {
           dataRef.current[i].push(item[i]);
         }
@@ -352,7 +360,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         webref.current.injectJavaScript(`
           var item = ${JSON.stringify(item)};
 
-          if (!window._data) {
+          if (window._data === undefined || window._data == null || window._data.length !== item.length) {
             window._data = [];
             for (let i = 0; i < item.length; i++) {
               window._data.push([]);
@@ -493,6 +501,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const destroy = useCallback((): void => {
       if (isWeb) {
         uplotInstance.current?.destroy();
+        dataRef.current = [];
       } else {
         if (!webref?.current) {
           console.error('WebView reference is not set');
@@ -500,22 +509,26 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         }
 
         webref.current.injectJavaScript(`
+          window._data = []
 
-          // destroy data
-          if (window._data) {
-            window._data = [];
-          }
-
-          // destroy chart
           if (window._chart) {
-            window._chart.destroy();true;
-          } else {
-            console.error('Chart not initialized');
+            window._chart.destroy();
+            window.__CHART_CREATED__ = false;
           }
           true;
         `);
       }
+      initialized.current = false;
     }, []);
+
+    // destroy, clear data, and reinitialize the chart when the component unmounts
+    const reset = useCallback(
+      (opts: any, data: number[][], bgColor?: string): void => {
+        destroy();
+        createChart(opts, data, bgColor);
+      },
+      [],
+    );
 
     useImperativeHandle(ref, () => ({
       createChart,
@@ -527,6 +540,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       setVariable,
       setSize,
       destroy,
+      reset,
     }));
 
     if (Platform.OS === 'web') {
