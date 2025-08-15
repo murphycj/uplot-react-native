@@ -189,6 +189,8 @@ export interface UPlotProps {
   margin?: { title?: number; legend?: number };
   /** Callback for messages from the WebView */
   onMessage?: (event: any) => void;
+  /** Callback when the WebView has loaded */
+  onLoad?: (() => void) | null;
   /** JavaScript to be injected into the WebView */
   injectedJavaScript?: string;
   /** Additional props for the WebView */
@@ -204,6 +206,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       functions,
       margin = { title: MARGIN_TITLE, legend: MARGIN_LEGEND },
       onMessage,
+      onLoad = null,
       injectedJavaScript = '',
       ...webviewProps
     },
@@ -573,6 +576,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           scrollEnabled={false}
           onLoadEnd={(): void => {
             createChart(optionsFinal, data, bgColor);
+
+            if (onLoad) {
+              onLoad();
+            }
           }}
           ref={(r) => {
             if (r) {
