@@ -1,4 +1,5 @@
 import React, {
+  useState,
   forwardRef,
   useCallback,
   useImperativeHandle,
@@ -101,23 +102,28 @@ function _sliceSeries(
  */
 function getDimensions(
   options: any,
-  style: any,
-  deviceWidth: number,
-  deviceHeight: number,
+  width: number,
+  height: number,
+  // style: any,
+  // deviceWidth: number,
+  // deviceHeight: number,
   margin: { title?: number; legend?: number },
 ): {
   optionsFinal: any;
-  containerWidth: number;
-  containerHeight: number;
+  // containerWidth: number;
+  // containerHeight: number;
 } {
-  var containerWidth = options?.width || style?.width || deviceWidth;
-  containerWidth = Math.min(containerWidth, deviceWidth);
+  // var containerWidth = options?.width || style?.width || deviceWidth;
+  // containerWidth = Math.min(containerWidth, deviceWidth);
 
-  var containerHeight = options?.height || style?.height || deviceHeight;
-  containerHeight = Math.min(containerHeight, deviceHeight);
+  // var containerHeight = options?.height || style?.height || deviceHeight;
+  // containerHeight = Math.min(containerHeight, deviceHeight);
 
-  var uplotWidth = containerWidth;
-  var uplotHeight = containerHeight;
+  // var uplotWidth = containerWidth;
+  // var uplotHeight = containerHeight;
+
+  var uplotWidth = width;
+  var uplotHeight = height;
 
   if (options?.title) {
     // Subtract height for title
@@ -135,11 +141,12 @@ function getDimensions(
   optionsFinal.width = uplotWidth;
   optionsFinal.height = uplotHeight;
 
-  return { optionsFinal, containerWidth, containerHeight };
+  return optionsFinal;
+  // return { optionsFinal, containerWidth, containerHeight };
 }
 
 function getCreateChartString(
-  data: number[][] | null,
+  data: number[][] | null = null,
   options: any,
   bgColor: string = 'transparent',
   injectedJavaScript: string = '',
@@ -152,7 +159,7 @@ function getCreateChartString(
     data !== null ? `if (window.__CHART_CREATED__) return;` : ``;
 
   return `
-      (function() {
+    (function() {
         ${chartCreatedCheck}
         window.__CHART_CREATED__ = true;
 
@@ -217,21 +224,50 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     let webref: any = useRef(null);
     const uplotInstance = useRef<any>(null);
     const dataRef = useRef<number[][]>(data as number[][]);
-    const initialized = useRef(false);
+    const variablesRef = useRef<{ [key: string]: any }>({});
+    const initialized = useRef<boolean>(false);
+    const containerRef = useRef<any>(null);
+    const dimensionsRef = useRef({
+      containerWidth: options?.width || style?.width || height,
+      containerHeight: options?.height || style?.height || width,
+    });
 
     const bgColor = style?.backgroundColor || 'transparent';
 
-    var { optionsFinal, containerWidth, containerHeight } = useMemo(() => {
-      return getDimensions(options, style, width, height, margin);
-    }, [options, style, width, height]);
+    const handleLayout = useCallback((event) => {
+      const { width, height } = event.nativeEvent.layout;
+      dimensionsRef.current = {
+        containerWidth: width,
+        containerHeight: height,
+      };
+    }, []);
+
+    // var { optionsFinal, containerWidth, containerHeight } = useMemo(() => {
+
+    //   const { containerWidth, containerHeight } = dimensionsRef.current.containerWidth
+    //     ? dimensionsRef.current
+    //     : { containerWidth: width, containerHeight: height };
+
+    //   return getDimensions(options, style, containerWidth, containerHeight, margin);
+    // }, [style, width, height]);
+
+    // var optsFinal = useMemo(() => {
+    //   return options
+    //   // return getDimensions(
+    //   //     options,
+    //   //     dimensionsRef.current.containerWidth,
+    //   //     dimensionsRef.current.containerHeight,
+    //   //     margin,
+    //   //   );
+    // }, [style, margin]);
 
     useEffect(() => {
       // update uplot height and width if options change
 
       if (isWeb) {
         uplotInstance.current?.setSize({
-          width: containerWidth,
-          height: containerHeight,
+          width: dimensionsRef.current.containerWidth,
+          height: dimensionsRef.current.containerHeight,
         });
       } else {
         if (!webref.current) {
@@ -241,24 +277,39 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
         webref.current.injectJavaScript(`
           if (window._chart) {
-            window._chart.setSize(${JSON.stringify(containerWidth)}, ${JSON.stringify(containerHeight)});
+            window._chart.setSize(${JSON.stringify(dimensionsRef.current.containerWidth)}, ${JSON.stringify(dimensionsRef.current.containerHeight)});
           } else {
             console.error('Chart not initialized');
           }
           true;
         `);
       }
-    }, [containerWidth, containerHeight]);
+    }, [
+      dimensionsRef.current.containerHeight,
+      dimensionsRef.current.containerWidth,
+    ]);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const createChart = useCallback(
-      (opts: any, data: number[][], bgColor?: string): void => {
+      (opts: any, data: number[][] | null = null, bgColor?: string): void => {
         if (initialized.current) {
           return;
         }
 
+        const optsFinal = getDimensions(
+          opts,
+          // style,
+          dimensionsRef.current.containerWidth,
+          dimensionsRef.current.containerHeight,
+          margin,
+        );
+
         if (isWeb) {
-          uplotInstance.current = new uPlot(opts, data, webref.current);
+          uplotInstance.current = new uPlot(
+            optsFinal,
+            data == null ? dataRef.current : data,
+            webref.current,
+          );
         } else {
           // inject background color before chart setup if provided
           if (!webref?.current) {
@@ -267,7 +318,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           }
 
           webref.current.injectJavaScript(
-            getCreateChartString(data, opts, bgColor),
+            getCreateChartString(data, optsFinal, bgColor),
           );
         }
         initialized.current = true;
@@ -282,24 +333,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      * @param {Object} newOptions - The new options to set for the chart.
      */
     const updateOptions = useCallback((newOptions: any): void => {
-      if (isWeb) {
-        if (uplotInstance.current) {
-          uplotInstance.current.destroy();
-        }
+      // call getDimensions to update optionsFinal
 
-        uplotInstance.current = new uPlot(
-          newOptions,
-          dataRef.current,
-          webref.current,
-        );
-      } else {
-        if (!webref?.current) {
-          console.error('WebView reference is not set');
-          return;
-        }
-
-        webref.current.injectJavaScript(getCreateChartString(null, newOptions));
-      }
+      destroy(true); // keep data
+      createChart(newOptions);
     }, []);
 
     /**
@@ -374,7 +411,6 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             window._data[i].push(item[i]);
           }
           if (window._chart) {
-            console.debug('Pushing new data to uPlot chart');
             window._chart.setData(window._data);
           } else {
             console.error('Chart not initialized');
@@ -455,6 +491,8 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     // if web, sets the variable to window.[name]
     // if native, sets the variable to window.[name] via webref.current.injectJavaScript
     const setVariable = useCallback((name: string, value: any): void => {
+      variablesRef.current[name] = value;
+
       if (isWeb) {
         if (!window) {
           console.error('Window is not defined');
@@ -469,11 +507,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         }
 
         webref.current.injectJavaScript(`
-            if (window._chart) {
-              window.${name} = ${JSON.stringify(value)};
-            } else {
-              console.error('Chart not initialized');
-            }
+            window.${name} = ${JSON.stringify(value)};
             true;
           `);
       }
@@ -501,23 +535,27 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     }, []);
 
     // function to call destroy, also clears the data
-    const destroy = useCallback((): void => {
+    const destroy = useCallback((keepData: boolean = false): void => {
       if (isWeb) {
         uplotInstance.current?.destroy();
-        dataRef.current = [];
+        if (!keepData) {
+          dataRef.current = [];
+        }
       } else {
         if (!webref?.current) {
           console.error('WebView reference is not set');
           return;
         }
 
+        var keepDataStr = keepData ? '' : `window._data = [];`;
+
         webref.current.injectJavaScript(`
-          window._data = []
+          ${keepDataStr}
 
           if (window._chart) {
             window._chart.destroy();
-            window.__CHART_CREATED__ = false;
           }
+          window.__CHART_CREATED__ = false;
           true;
         `);
       }
@@ -550,15 +588,17 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       return (
         <View
           ref={(r): any => {
+            containerRef.current = r;
             webref.current = r;
             if (r) {
-              createChart(optionsFinal, data);
+              createChart(options, data);
             }
           }}
+          onLayout={handleLayout}
           style={{
             ...style,
-            width: containerWidth,
-            height: containerHeight,
+            width: options?.width || style?.width || '100%',
+            height: options?.height || style?.height || '100%',
           }}
         />
       );
@@ -570,12 +610,12 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           source={html}
           style={{
             ...style,
-            width: containerWidth,
-            height: containerHeight,
+            width: options?.width || style?.width || '100%',
+            height: options?.height || style?.height || '100%',
           }}
           scrollEnabled={false}
           onLoadEnd={(): void => {
-            createChart(optionsFinal, data, bgColor);
+            createChart(options, data, bgColor);
 
             if (onLoad) {
               onLoad();
@@ -583,9 +623,34 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           }}
           ref={(r) => {
             if (r) {
+              var shouldReinit = containerRef.current && r !== webref.current;
+
+              if (shouldReinit) {
+                initialized.current = false;
+                destroy(true);
+              }
+
+              containerRef.current = r;
               webref.current = r;
+
+              if (shouldReinit) {
+                // re-add any variables that were set
+                var injectedVars = '';
+                Object.keys(variablesRef.current).forEach((key) => {
+                  injectedVars += `window.${key} = ${JSON.stringify(
+                    variablesRef.current[key],
+                  )};`;
+                });
+                webref.current.injectJavaScript(`
+                  ${injectedVars}
+                  true;
+                `);
+
+                createChart(options, data, bgColor);
+              }
             }
           }}
+          onLayout={handleLayout}
           javaScriptEnabled={true}
           injectedJavaScript={`${injectedJavaScript}; true;`}
           onMessage={(payload): void => {
