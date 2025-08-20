@@ -242,6 +242,98 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       };
     }, []);
 
+    // memoized webview/view style to avoid recreating object on every render
+    const memoizedContainerStyle = useMemo(() => {
+      const base = style || {};
+      return {
+        ...base,
+        width: options?.width || base?.width || '100%',
+        height: options?.height || base?.height || '100%',
+      };
+    }, [style, options?.width, options?.height]);
+
+    // memoized onLoadEnd handler for native WebView
+    const handleLoadEnd = useCallback((): void => {
+      // Use canonical dataRef when creating the native WebView chart
+      dataRef.current = toPlainArrays(data as any[]) as number[][];
+      createChart(options, dataRef.current, bgColor);
+
+      if (onLoad) {
+        onLoad();
+      }
+    }, [data, options, bgColor, onLoad]);
+
+    // memoized onMessage handler for native WebView
+    const handleMessage = useCallback(
+      (payload: any): void => {
+        if (onMessage) {
+          onMessage(payload);
+          return;
+        }
+
+        let dataPayload;
+        try {
+          dataPayload = JSON.parse(payload.nativeEvent.data);
+        } catch (e) {}
+
+        if (dataPayload) {
+          if (dataPayload.type === 'Console') {
+            console.info(`[Console] ${JSON.stringify(dataPayload.data)}`);
+          } else {
+            console.log(dataPayload);
+          }
+        }
+      },
+      [onMessage],
+    );
+
+    // memoized ref callback for both web container and native WebView
+    const setWebRef = useCallback(
+      (r: any) => {
+        const prevContainer = containerRef.current;
+        const prevWeb = webref.current;
+        const shouldReinit = Boolean(prevContainer && r && r !== prevWeb);
+
+        // update refs (allow clearing when r is null)
+        containerRef.current = r;
+        webref.current = r;
+
+        if (!r) return;
+
+        // On web, simply create chart when the DOM node appears
+        if (Platform.OS === 'web') {
+          createChart(options, data);
+          return;
+        }
+
+        // Native WebView: detect reinitialization and restore variables/data
+        if (shouldReinit) {
+          initialized.current = false;
+          destroy(true);
+        }
+
+        if (shouldReinit) {
+          // console.log('Reinitializing WebView chart');
+
+          // re-add any variables that were set
+          let injectedVars = '';
+          Object.keys(variablesRef.current).forEach((key) => {
+            injectedVars += `window.${key} = ${JSON.stringify(
+              variablesRef.current[key],
+            )};`;
+          });
+          webref.current.injectJavaScript(`
+            ${injectedVars}
+            true;
+          `);
+
+          // reinit using the canonical dataRef rather than the original prop
+          createChart(options, dataRef.current, bgColor);
+        }
+      },
+      [options, data, bgColor],
+    );
+
     // Keep canonical copy of incoming prop `data` (convert typed arrays to plain arrays).
     // Also mirror to window._data for native platforms when webref is available.
     useEffect(() => {
@@ -603,19 +695,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     if (Platform.OS === 'web') {
       return (
         <View
-          ref={(r): any => {
-            containerRef.current = r;
-            webref.current = r;
-            if (r) {
-              createChart(options, data);
-            }
-          }}
+          ref={setWebRef}
           onLayout={handleLayout}
-          style={{
-            ...style,
-            width: options?.width || style?.width || '100%',
-            height: options?.height || style?.height || '100%',
-          }}
+          style={memoizedContainerStyle}
         />
       );
     } else {
@@ -624,79 +706,14 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           {...webviewProps}
           originWhitelist={['*']}
           source={html}
-          style={{
-            ...style,
-            width: options?.width || style?.width || '100%',
-            height: options?.height || style?.height || '100%',
-          }}
+          style={memoizedContainerStyle}
           scrollEnabled={false}
-          onLoadEnd={(): void => {
-            // Use canonical dataRef when creating the native WebView chart
-            dataRef.current = toPlainArrays(data as any[]) as number[][];
-            createChart(options, dataRef.current, bgColor);
-
-            if (onLoad) {
-              onLoad();
-            }
-          }}
-          ref={(r) => {
-            if (r) {
-              var shouldReinit = containerRef.current && r !== webref.current;
-
-              if (shouldReinit) {
-                initialized.current = false;
-                destroy(true);
-              }
-
-              console.log('shouldReinit', shouldReinit);
-              console.log('data', data);
-
-              containerRef.current = r;
-              webref.current = r;
-
-              if (shouldReinit) {
-                // re-add any variables that were set
-                var injectedVars = '';
-                Object.keys(variablesRef.current).forEach((key) => {
-                  injectedVars += `window.${key} = ${JSON.stringify(
-                    variablesRef.current[key],
-                  )};`;
-                });
-                webref.current.injectJavaScript(`
-                  ${injectedVars}
-                  true;
-                `);
-
-                // reinit using the canonical dataRef rather than the original prop
-                createChart(options, dataRef.current, bgColor);
-              }
-            }
-          }}
+          onLoadEnd={handleLoadEnd}
+          ref={setWebRef}
           onLayout={handleLayout}
           javaScriptEnabled={true}
           injectedJavaScript={`${injectedJavaScript}; true;`}
-          onMessage={(payload): void => {
-            // in webviewProps, if onMessage is provided, call it with the payload
-            if (onMessage) {
-              onMessage(payload);
-              return;
-            }
-
-            // Handle messages from the webview if needed
-            // console.log('Message from webview:', event.nativeEvent.data);
-            let dataPayload;
-            try {
-              dataPayload = JSON.parse(payload.nativeEvent.data);
-            } catch (e) {}
-
-            if (dataPayload) {
-              if (dataPayload.type === 'Console') {
-                console.info(`[Console] ${JSON.stringify(dataPayload.data)}`);
-              } else {
-                console.log(dataPayload);
-              }
-            }
-          }}
+          onMessage={handleMessage}
         />
       );
     }
