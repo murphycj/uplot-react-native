@@ -242,6 +242,28 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       };
     }, []);
 
+    // Keep canonical copy of incoming prop `data` (convert typed arrays to plain arrays).
+    // Also mirror to window._data for native platforms when webref is available.
+    useEffect(() => {
+      if (!data) return;
+      const plain = toPlainArrays(data as any[]);
+      dataRef.current = plain as number[][];
+
+      if (!isWeb && webref?.current) {
+        // Mirror to webview window._data
+        try {
+          webref.current.injectJavaScript(`
+            window._data = ${JSON.stringify(dataRef.current)};
+            true;
+          `);
+        } catch (e) {
+          console.error('Failed to inject initial data into WebView', e);
+        }
+      } else if (isWeb) {
+        uplotInstance.current?.setData(dataRef.current);
+      }
+    }, [data]);
+
     // var { optionsFinal, containerWidth, containerHeight } = useMemo(() => {
 
     //   const { containerWidth, containerHeight } = dimensionsRef.current.containerWidth
@@ -304,10 +326,12 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           margin,
         );
 
+        const chartData = data == null ? dataRef.current : data;
+
         if (isWeb) {
           uplotInstance.current = new uPlot(
             optsFinal,
-            data == null ? dataRef.current : data,
+            chartData,
             webref.current,
           );
         } else {
@@ -317,8 +341,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             return;
           }
 
+          // Ensure dataRef is the source of truth for the created chart in the WebView
+          dataRef.current = toPlainArrays(chartData || []) as number[][];
           webref.current.injectJavaScript(
-            getCreateChartString(data, optsFinal, bgColor),
+            getCreateChartString(dataRef.current, optsFinal, bgColor),
           );
         }
         initialized.current = true;
@@ -346,78 +372,71 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      * @param {number[][]} newData - The new data to set for the chart.
      */
     const setData = useCallback((newData: number[][]): void => {
+      // Keep canonical copy (plain arrays)
+      const plain = toPlainArrays(newData as any[]);
+      dataRef.current = plain as number[][];
+
       if (isWeb) {
-        dataRef.current = newData;
         uplotInstance.current?.setData(dataRef.current);
-      } else {
-        if (!webref?.current) {
-          console.error('WebView reference is not set');
-          return;
-        }
-
-        webref.current.injectJavaScript(`
-          var item = ${JSON.stringify(toPlainArrays(newData))};
-
-          if (window._chart) {
-            window._data = item;
-            var size = [
-              item.length,
-              item[0].length,
-              item[1].length,
-            ]
-            window._chart.setData(window._data);
-          } else {
-            console.error('Chart not initialized');
-          }
-          true;
-          `);
+        return;
       }
+
+      if (!webref?.current) {
+        console.error('WebView reference is not set');
+        return;
+      }
+
+      // Mirror full data into window._data and set chart
+      webref.current.injectJavaScript(`
+        window._data = ${JSON.stringify(dataRef.current)};
+        if (window._chart) {
+          window._chart.setData(window._data);
+        } else {
+          console.error('Chart not initialized');
+        }
+        true;
+      `);
     }, []);
 
     /**
      * Append a new data point across all series: [x, y1, y2, ...]
      */
     const pushData = useCallback((item: number[]): void => {
+      // Update canonical copy locally first
+      if (!dataRef.current || dataRef.current.length !== item.length) {
+        dataRef.current = [];
+        for (let i = 0; i < item.length; i++) dataRef.current.push([]);
+      }
+      for (let i = 0; i < item.length; i++) dataRef.current[i].push(item[i]);
+
       if (isWeb) {
-        if (!dataRef.current || dataRef.current.length !== item.length) {
-          dataRef.current = [];
-          for (let i = 0; i < item.length; i++) {
-            dataRef.current.push([]);
-          }
-        }
-
-        for (let i = 0; i < item.length; i++) {
-          dataRef.current[i].push(item[i]);
-        }
-
         uplotInstance.current?.setData(dataRef.current);
-      } else {
-        if (!webref?.current) {
-          console.error('WebView reference is not set');
-          return;
-        }
+        return;
+      }
 
-        webref.current.injectJavaScript(`
+      if (!webref?.current) {
+        console.error('WebView reference is not set');
+        return;
+      }
+
+      // For native: inject only the new item and append to window._data in the WebView,
+      // then call setData there. Avoid sending the entire dataRef.
+      webref.current.injectJavaScript(`
+        (function() {
           var item = ${JSON.stringify(item)};
-
-          if (window._data === undefined || window._data == null || window._data.length !== item.length) {
+          if (!window._data || window._data.length !== item.length) {
             window._data = [];
-            for (let i = 0; i < item.length; i++) {
-              window._data.push([]);
-            }
+            for (var i = 0; i < item.length; i++) window._data.push([]);
           }
-
-          for (let i = 0; i < item.length; i++) {
-            window._data[i].push(item[i]);
-          }
+          for (var j = 0; j < item.length; j++) window._data[j].push(item[j]);
           if (window._chart) {
             window._chart.setData(window._data);
           } else {
             console.error('Chart not initialized');
           }
-          true;
-        `);
-      }
+        })();
+        true;
+      `);
     }, []);
 
     /**
@@ -432,37 +451,34 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      */
     const sliceSeries = useCallback(
       (axis: number, min: number, max: number): void => {
-        if (isWeb) {
-          // Slice the data arrays
-          dataRef.current = _sliceSeries(dataRef.current, axis, min, max);
+        // Update canonical dataRef by slicing locally
+        dataRef.current = _sliceSeries(dataRef.current, axis, min, max);
 
+        if (isWeb) {
           if (!uplotInstance.current) {
             console.error('uPlot instance is not initialized');
             return;
           }
-          // Update the uPlot instance with the new data
           uplotInstance.current.setData(dataRef.current);
-        } else {
-          if (!webref?.current) {
-            console.error('WebView reference is not set');
-            return;
-          }
-          webref.current.injectJavaScript(`
-            var axis = ${JSON.stringify(axis)};
-            var min = ${JSON.stringify(min)};
-            var max = ${JSON.stringify(max)};
-            
-            if (window._chart && window._data && window._data[axis]) {
-              // call sliceSeries function, which we assume is already defined in the webview
-              window._data = sliceSeries(window._data, axis, min, max);
-              window._chart.setData(window._data);
-            } else {
-              console.error('Chart not initialized or data not available');
-            }
-
-            true;
-          `);
+          return;
         }
+
+        if (!webref?.current) {
+          console.error('WebView reference is not set');
+          return;
+        }
+
+        // Mirror sliced data into window._data and update the chart in the WebView
+        webref.current.injectJavaScript(`
+          window._data = ${JSON.stringify(dataRef.current)};
+          if (window._chart) {
+            window._chart.setData(window._data);
+          } else {
+            console.error('Chart not initialized or data not available');
+          }
+          true;
+        `);
+        return;
       },
       [],
     );
@@ -615,7 +631,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           }}
           scrollEnabled={false}
           onLoadEnd={(): void => {
-            createChart(options, data, bgColor);
+            // Use canonical dataRef when creating the native WebView chart
+            dataRef.current = toPlainArrays(data as any[]) as number[][];
+            createChart(options, dataRef.current, bgColor);
 
             if (onLoad) {
               onLoad();
@@ -629,6 +647,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
                 initialized.current = false;
                 destroy(true);
               }
+
+              console.log('shouldReinit', shouldReinit);
+              console.log('data', data);
 
               containerRef.current = r;
               webref.current = r;
@@ -646,7 +667,8 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
                   true;
                 `);
 
-                createChart(options, data, bgColor);
+                // reinit using the canonical dataRef rather than the original prop
+                createChart(options, dataRef.current, bgColor);
               }
             }
           }}
