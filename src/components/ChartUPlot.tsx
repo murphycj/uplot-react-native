@@ -22,9 +22,49 @@ if (isWeb) {
 const MARGIN_TITLE = 27; // Height of the title
 const MARGIN_LEGEND = 50; // Height of the legend
 
+// Utility functions to be injected into the WebView
+// these are also present in the uplot.html file, but
+// they are also here since in some cases the <script>
+// tag in the HTML file is sometimes not executed in time
+const UTIL_FUNCTIONS = `
+function parseOptions(options) {
+  var parsed = JSON.parse(options, (k, v) => {
+    if (typeof v === 'string' && v.startsWith('__UPLOT_FUNC__')) {
+      var name = v.replace(/^__UPLOT_FUNC__/, '');
+      return window[name];
+    }
+    return v;
+  });
+
+  return parsed;
+}
+
+function sliceSeries(data, axis, min, max) {
+  const axisData = data[axis];
+  let start = -1;
+  let end = -1;
+  for (let i = 0; i < axisData.length; i++) {
+    const v = axisData[i];
+    if (v >= min && v <= max) {
+      if (start === -1) start = i;
+      end = i;
+    }
+  }
+
+  if (start === -1) {
+    return data.map(() => []);
+  }
+
+  return data.map((series) => series.slice(start, end + 1));
+}
+`;
+
 const stringify = (obj: any): string => {
   return JSON.stringify(obj, (_key, val) =>
-    typeof val === 'function' ? `function(${val.name || 'anonymous'})` : val,
+    // encode functions as an explicit marker that parseOptions can detect reliably
+    typeof val === 'function'
+      ? `__UPLOT_FUNC__${val.name || 'anonymous'}`
+      : val,
   );
 };
 
@@ -393,7 +433,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           if (window._chart) {
             window._chart.setSize(${JSON.stringify(dimensionsRef.current.containerWidth)}, ${JSON.stringify(dimensionsRef.current.containerHeight)});
           } else {
-            console.error('Chart not initialized');
+            console.error('useEffect - dim | Chart not initialized');
           }
           true;
         `);
@@ -484,7 +524,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         if (window._chart) {
           window._chart.setData(window._data);
         } else {
-          console.error('Chart not initialized');
+          console.error('setData | Chart not initialized');
         }
         true;
       `);
@@ -524,7 +564,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           if (window._chart) {
             window._chart.setData(window._data);
           } else {
-            console.error('Chart not initialized');
+            console.error('pushData | Chart not initialized');
           }
         })();
         true;
@@ -566,7 +606,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           if (window._chart) {
             window._chart.setData(window._data);
           } else {
-            console.error('Chart not initialized or data not available');
+            console.error('sliceSeries | Chart not initialized or data not available');
           }
           true;
         `);
@@ -589,7 +629,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           if (window._chart) {
             window._chart.setScale(${JSON.stringify(axis)}, ${JSON.stringify(options)});true;
           } else {
-            console.error('Chart not initialized');
+            console.error('setScale | Chart not initialized');
           }
           true;
         `);
@@ -635,7 +675,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           if (!window._chart) {
             window._chart.setSize(${JSON.stringify(width)}, ${JSON.stringify(height)});true;
           } else {
-            console.error('Chart not initialized');
+            console.error('setSize | Chart not initialized');
           }
           true;
         `);
@@ -679,6 +719,22 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       [],
     );
 
+    // add UTIL_FUNCTIONS to the injectedJavaScript
+    const injectedJavaScriptWithFunctions = useMemo(() => {
+      return `
+      ${UTIL_FUNCTIONS}
+      
+      ${injectedJavaScript}
+
+      true;
+      `;
+    }, [injectedJavaScript]);
+
+    console.log(
+      'injectedJavaScriptWithFunctions',
+      injectedJavaScriptWithFunctions,
+    );
+
     useImperativeHandle(ref, () => ({
       createChart,
       updateOptions,
@@ -712,7 +768,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           ref={setWebRef}
           onLayout={handleLayout}
           javaScriptEnabled={true}
-          injectedJavaScript={`${injectedJavaScript}; true;`}
+          injectedJavaScript={injectedJavaScriptWithFunctions}
           onMessage={handleMessage}
         />
       );

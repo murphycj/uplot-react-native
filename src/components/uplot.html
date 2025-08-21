@@ -16,17 +16,9 @@
 
       function parseOptions(options) {
         var parsed = JSON.parse(options, (k, v) => {
-          if (
-            typeof v === 'string' &&
-            (v.trim().startsWith('function') || v.includes('=>'))
-          ) {
-            const fnMatch = v.match(/^function\(\s*([^)]+)\s*\)$/);
-            if (fnMatch) {
-              return window[fnMatch[1]];
-            } else {
-              console.error('Invalid function format');
-              return () => {};
-            }
+          if (typeof v === 'string' && v.startsWith('__UPLOT_FUNC__')) {
+            var name = v.replace(/^__UPLOT_FUNC__/, '');
+            return window[name];
           }
           return v;
         });
