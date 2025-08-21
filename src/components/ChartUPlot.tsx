@@ -27,6 +27,21 @@ const MARGIN_LEGEND = 50; // Height of the legend
 // they are also here since in some cases the <script>
 // tag in the HTML file is sometimes not executed in time
 const UTIL_FUNCTIONS = `
+/* queue helpers: available early via injectedJavaScriptBeforeContentLoaded */
+window.__uplot_queue__ = window.__uplot_queue__ || [];
+window.__uplot_enqueue__ = function(fn) {
+  window.__uplot_queue__ = window.__uplot_queue__ || [];
+  window.__uplot_queue__.push(fn);
+};
+window.__uplot_flush__ = function() {
+  if (!window.__uplot_queue__) return;
+  var q = window.__uplot_queue__;
+  window.__uplot_queue__ = [];
+  for (var i = 0; i < q.length; i++) {
+    try { q[i](); } catch (e) { console.error('uplot queue fn error', e); }
+  }
+};
+
 function parseOptions(options) {
   var parsed = JSON.parse(options, (k, v) => {
     if (typeof v === 'string' && v.startsWith('__UPLOT_FUNC__')) {
@@ -201,9 +216,8 @@ function getCreateChartString(
   return `
     (function() {
         ${chartCreatedCheck}
-        window.__CHART_CREATED__ = true;
 
-        // inject custom functions if provided
+        // ensure helper functions are available
         ${injectedJavaScript}
 
         document.body.style.backgroundColor='${bgColor}';
@@ -211,17 +225,74 @@ function getCreateChartString(
         // stash your data on window if provided
         ${dataAssignment}
 
-        // stash options on window
-        window._opts = parseOptions('${stringify(options)}');
+        // helper that actually builds the chart (keeps errors visible)
+        function __createUPlotChart() {
+          try {
+            window._opts = parseOptions('${stringify(options)}');
 
-        if (window._chart) window._chart.destroy();
+            if (window._chart) {
+              try { window._chart.destroy(); } catch (e) {}
+            }
 
-        // now actually construct uPlot
-        window._chart = new uPlot(window._opts, window._data, document.getElementById('chart'));
+            window._chart = new uPlot(window._opts, window._data, document.getElementById('chart'));
+
+            // mark created and flush queued commands
+            window.__CHART_CREATED__ = true;
+            if (window.__uplot_flush__) {
+              try { window.__uplot_flush__(); } catch (e) { console.error('flush error', e); }
+            }
+
+            console.log('uPlot chart created');
+          } catch (err) {
+            console.error('createUPlotChart error', err && err.message ? err.message : err);
+            window.__CHART_CREATED__ = false;
+          }
+        }
+
+        // If uPlot is already loaded, create immediately; otherwise poll until available (timeout)
+        if (typeof window.uPlot !== 'undefined') {
+          __createUPlotChart();
+        } else {
+          var __waitCount = 0;
+          var __waitMax = 20; // ~1s with 50ms interval
+          var __iv = setInterval(function() {
+            if (typeof window.uPlot !== 'undefined') {
+              clearInterval(__iv);
+              __createUPlotChart();
+              return;
+            }
+            __waitCount++;
+            if (__waitCount >= __waitMax) {
+              clearInterval(__iv);
+              console.error('uPlot not found after timeout; ensure uPlot script is included in the HTML');
+            }
+          }, 50);
+        }
       })();
       true;
     `;
 }
+
+// helper used on the RN side to wrap injected snippets so they either run now or enqueue
+const runWhenReady = (body: string): string => {
+  return `
+    (function(){
+      function __run(){ ${body} }
+      if (typeof window !== 'undefined' && window._chart) {
+        __run();
+      } else {
+        // prefer enqueue helper if present
+        if (window.__uplot_enqueue__) {
+          window.__uplot_enqueue__(__run);
+        } else {
+          window.__uplot_queue__ = window.__uplot_queue__ || [];
+          window.__uplot_queue__.push(__run);
+        }
+      }
+    })();
+    true;
+  `;
+};
 
 export interface UPlotProps {
   /** uPlot data array: [xValues[], series1[], series2[], ...] */
@@ -396,25 +467,6 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       }
     }, [data]);
 
-    // var { optionsFinal, containerWidth, containerHeight } = useMemo(() => {
-
-    //   const { containerWidth, containerHeight } = dimensionsRef.current.containerWidth
-    //     ? dimensionsRef.current
-    //     : { containerWidth: width, containerHeight: height };
-
-    //   return getDimensions(options, style, containerWidth, containerHeight, margin);
-    // }, [style, width, height]);
-
-    // var optsFinal = useMemo(() => {
-    //   return options
-    //   // return getDimensions(
-    //   //     options,
-    //   //     dimensionsRef.current.containerWidth,
-    //   //     dimensionsRef.current.containerHeight,
-    //   //     margin,
-    //   //   );
-    // }, [style, margin]);
-
     useEffect(() => {
       // update uplot height and width if options change
 
@@ -429,14 +481,14 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           return;
         }
 
-        webref.current.injectJavaScript(`
+        const body = `
           if (window._chart) {
             window._chart.setSize(${JSON.stringify(dimensionsRef.current.containerWidth)}, ${JSON.stringify(dimensionsRef.current.containerHeight)});
           } else {
             console.error('useEffect - dim | Chart not initialized');
           }
-          true;
-        `);
+        `;
+        webref.current.injectJavaScript(runWhenReady(body));
       }
     }, [
       dimensionsRef.current.containerHeight,
@@ -475,9 +527,16 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
           // Ensure dataRef is the source of truth for the created chart in the WebView
           dataRef.current = toPlainArrays(chartData || []) as number[][];
-          webref.current.injectJavaScript(
-            getCreateChartString(dataRef.current, optsFinal, bgColor),
+          const createChartStr = getCreateChartString(
+            dataRef.current,
+            optsFinal,
+            bgColor,
+            UTIL_FUNCTIONS,
           );
+
+          console.log('createChartStr', createChartStr);
+
+          webref.current.injectJavaScript(createChartStr);
         }
         initialized.current = true;
       },
@@ -491,8 +550,6 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      * @param {Object} newOptions - The new options to set for the chart.
      */
     const updateOptions = useCallback((newOptions: any): void => {
-      // call getDimensions to update optionsFinal
-
       destroy(true); // keep data
       createChart(newOptions);
     }, []);
@@ -518,16 +575,15 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         return;
       }
 
-      // Mirror full data into window._data and set chart
-      webref.current.injectJavaScript(`
+      const body = `
         window._data = ${JSON.stringify(dataRef.current)};
         if (window._chart) {
           window._chart.setData(window._data);
         } else {
           console.error('setData | Chart not initialized');
         }
-        true;
-      `);
+      `;
+      webref.current.injectJavaScript(runWhenReady(body));
     }, []);
 
     /**
@@ -553,22 +609,20 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
       // For native: inject only the new item and append to window._data in the WebView,
       // then call setData there. Avoid sending the entire dataRef.
-      webref.current.injectJavaScript(`
-        (function() {
-          var item = ${JSON.stringify(item)};
-          if (!window._data || window._data.length !== item.length) {
-            window._data = [];
-            for (var i = 0; i < item.length; i++) window._data.push([]);
-          }
-          for (var j = 0; j < item.length; j++) window._data[j].push(item[j]);
-          if (window._chart) {
-            window._chart.setData(window._data);
-          } else {
-            console.error('pushData | Chart not initialized');
-          }
-        })();
-        true;
-      `);
+      const body = `
+        var item = ${JSON.stringify(item)};
+        if (!window._data || window._data.length !== item.length) {
+          window._data = [];
+          for (var i = 0; i < item.length; i++) window._data.push([]);
+        }
+        for (var j = 0; j < item.length; j++) window._data[j].push(item[j]);
+        if (window._chart) {
+          window._chart.setData(window._data);
+        } else {
+          console.error('pushData | Chart not initialized');
+        }
+      `;
+      webref.current.injectJavaScript(runWhenReady(body));
     }, []);
 
     /**
@@ -601,16 +655,15 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         }
 
         // Mirror sliced data into window._data and update the chart in the WebView
-        webref.current.injectJavaScript(`
+        const body = `
           window._data = ${JSON.stringify(dataRef.current)};
           if (window._chart) {
             window._chart.setData(window._data);
           } else {
             console.error('sliceSeries | Chart not initialized or data not available');
           }
-          true;
-        `);
-        return;
+        `;
+        webref.current.injectJavaScript(runWhenReady(body));
       },
       [],
     );
@@ -625,14 +678,14 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           return;
         }
 
-        webref.current.injectJavaScript(`
+        const body = `
           if (window._chart) {
-            window._chart.setScale(${JSON.stringify(axis)}, ${JSON.stringify(options)});true;
+            window._chart.setScale(${JSON.stringify(axis)}, ${JSON.stringify(options)});
           } else {
             console.error('setScale | Chart not initialized');
           }
-          true;
-        `);
+        `;
+        webref.current.injectJavaScript(runWhenReady(body));
       }
     }, []);
 
@@ -671,14 +724,14 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           return;
         }
 
-        webref.current.injectJavaScript(`
-          if (!window._chart) {
-            window._chart.setSize(${JSON.stringify(width)}, ${JSON.stringify(height)});true;
+        const body = `
+          if (window._chart) {
+            window._chart.setSize(${JSON.stringify(width)}, ${JSON.stringify(height)});
           } else {
             console.error('setSize | Chart not initialized');
           }
-          true;
-        `);
+        `;
+        webref.current.injectJavaScript(runWhenReady(body));
       }
     }, []);
 
@@ -697,15 +750,17 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
         var keepDataStr = keepData ? '' : `window._data = [];`;
 
-        webref.current.injectJavaScript(`
+        const body = `
           ${keepDataStr}
-
           if (window._chart) {
-            window._chart.destroy();
+            try { window._chart.destroy(); } catch (e) {}
           }
           window.__CHART_CREATED__ = false;
-          true;
-        `);
+          // clear queued ops to avoid stale calls after destroy
+          window.__uplot_queue__ = [];
+        `;
+        // run immediately (no need to queue)
+        webref.current.injectJavaScript(`${body} true;`);
       }
       initialized.current = false;
     }, []);
@@ -729,11 +784,6 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       true;
       `;
     }, [injectedJavaScript]);
-
-    console.log(
-      'injectedJavaScriptWithFunctions',
-      injectedJavaScriptWithFunctions,
-    );
 
     useImperativeHandle(ref, () => ({
       createChart,
@@ -768,7 +818,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           ref={setWebRef}
           onLayout={handleLayout}
           javaScriptEnabled={true}
-          injectedJavaScript={injectedJavaScriptWithFunctions}
+          injectedJavaScriptBeforeContentLoaded={
+            injectedJavaScriptWithFunctions
+          }
           onMessage={handleMessage}
         />
       );

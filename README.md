@@ -8,7 +8,13 @@ React native wrapper around [uPlot](https://github.com/leeoniya/uPlot). Works on
 <img src="https://github.com/user-attachments/assets/f9e2e65c-bfe2-40a4-87ef-4d68faa11e77" height="400" />
 </p>
 
-**Note**: This library is a work in progress. It may not fully support all uPlot features yet, so feel free to open issues or pull requests to help improve it.
+### Caveats
+
+1. The library is not a simple drop-in replacement for uPlot. It requires a decent amount of setup and understanding how this wrapper works.
+
+2. Interactions like zooming and panning are not supported on iOS and Android. This is due to the limitations of the WebView component. I suggest using `react-native-gesture-handler`, `react-native-reanimated`, and `react-native-animateable-text` to roll your own interactions and legend display.
+
+3. The library is still in active development, so things may change. I've not tested all possible features of uPlot. Feel free to open an issue / PR to improve it.
 
 ## Why?
 
@@ -155,6 +161,8 @@ eas build --profile development --platform ios --local
 1. Don't create inline props to the `ChartUPlot` component, otherwise uPlot instance may get out of sync with the rendered component. Instead, use a `useMemo` hook to memoize the options and data.
 
 2. The functions you pass to the `injectedJavaScript` can be tricky to debug, so be sure to test them in a web environment first.
+
+3. Clear the ref you pass to `ChartUPlot` when the component unmounts.
 
 ## Contributing
 
