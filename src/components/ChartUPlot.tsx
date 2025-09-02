@@ -109,7 +109,9 @@ function isTypedArray(x: unknown): x is AnyTypedArray {
  */
 function toPlainArrays(arrays: any[]): any[] {
   return arrays.map((arr) =>
-    isTypedArray(arr) ? Array.from(arr as ArrayLike<number | bigint>) : arr,
+    isTypedArray(arr)
+      ? Array.from(arr as ArrayLike<number | bigint>)
+      : arr.slice(),
   );
 }
 
@@ -165,18 +167,7 @@ function getDimensions(
   margin: { title?: number; legend?: number },
 ): {
   optionsFinal: any;
-  // containerWidth: number;
-  // containerHeight: number;
 } {
-  // var containerWidth = options?.width || style?.width || deviceWidth;
-  // containerWidth = Math.min(containerWidth, deviceWidth);
-
-  // var containerHeight = options?.height || style?.height || deviceHeight;
-  // containerHeight = Math.min(containerHeight, deviceHeight);
-
-  // var uplotWidth = containerWidth;
-  // var uplotHeight = containerHeight;
-
   var uplotWidth = width;
   var uplotHeight = height;
 
@@ -197,7 +188,6 @@ function getDimensions(
   optionsFinal.height = uplotHeight;
 
   return optionsFinal;
-  // return { optionsFinal, containerWidth, containerHeight };
 }
 
 function getCreateChartString(
@@ -337,23 +327,36 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const { width, height } = useWindowDimensions();
     let webref: any = useRef(null);
     const uplotInstance = useRef<any>(null);
-    const dataRef = useRef<number[][]>(data as number[][]);
+    // Ensure we keep an independent copy of the incoming `data` so modifications
+    // to dataRef.current do NOT mutate the original prop. toPlainArrays converts
+    // typed arrays into plain arrays and returns new arrays.
+    const dataRef = useRef<number[][]>(
+      toPlainArrays((data || []) as any[]) as number[][],
+    );
     const variablesRef = useRef<{ [key: string]: any }>({});
     const initialized = useRef<boolean>(false);
     const containerRef = useRef<any>(null);
     const dimensionsRef = useRef({
-      containerWidth: Math.round(options?.width || style?.width || height),
-      containerHeight: Math.round(options?.height || style?.height || width),
+      containerWidth: Math.round(options?.width || style?.width || width),
+      containerHeight: Math.round(options?.height || style?.height || height),
     });
 
     const bgColor = style?.backgroundColor || 'transparent';
 
     const handleLayout = useCallback((event) => {
       const { width, height } = event.nativeEvent.layout;
+      // console.log(
+      //   `handleLayout | name=${name}, width=${width}, height=${height}`,
+      // );
+
       dimensionsRef.current = {
         containerWidth: Math.round(width),
         containerHeight: Math.round(height),
       };
+
+      if (isWeb) {
+        handleLoadEnd();
+      }
     }, []);
 
     // memoized webview/view style to avoid recreating object on every render
@@ -368,6 +371,8 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
     // memoized onLoadEnd handler for native WebView
     const handleLoadEnd = useCallback((): void => {
+      // console.log(`handleLoadEnd | name=${name}`);
+
       // Use canonical dataRef when creating the native WebView chart
       dataRef.current = toPlainArrays(data as any[]) as number[][];
       createChart(options, dataRef.current, bgColor);
@@ -417,8 +422,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         if (!r) return;
 
         // On web, simply create chart when the DOM node appears
-        if (Platform.OS === 'web') {
-          createChart(options, data);
+        if (isWeb) {
           return;
         }
 
@@ -449,6 +453,16 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       },
       [options, data, bgColor],
     );
+
+    // useEffect(() => {
+    //   console.log('useffect [ref]', ref);
+
+    //   if (Platform.OS === 'web') {
+    //     console.log('useffect [ref] - success');
+    //     handleLoadEnd();
+    //     return;
+    //   }
+    // }, [ref]);
 
     // Keep canonical copy of incoming prop `data` (convert typed arrays to plain arrays).
     // Also mirror to window._data for native platforms when webref is available.
@@ -515,7 +529,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           return;
         }
 
-        const optsFinal = getDimensions(
+        const optsFinal: any = getDimensions(
           opts,
           // style,
           dimensionsRef.current.containerWidth,
@@ -768,13 +782,16 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
     // function to call destroy, also clears the data
     const destroy = useCallback((keepData: boolean = false): void => {
-      // console.log(`destroy | name=${name}, keepData=${keepData}`);
+      // console.log(
+      //   `destroy | name=${name}, keepData=${keepData}, data=${data?.length}`,
+      // );
+
+      if (!keepData) {
+        dataRef.current = [];
+      }
 
       if (isWeb) {
         uplotInstance.current?.destroy();
-        if (!keepData) {
-          dataRef.current = [];
-        }
       } else {
         if (!webref?.current) {
           console.error('WebView reference is not set');
@@ -782,18 +799,28 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         }
 
         var keepDataStr = keepData ? '' : `window._data = [];`;
+        // var dataStr = data ? `window._data = ${JSON.stringify(data)};` : '';
 
         const body = `
           ${keepDataStr}
-          if (window._chart) {
-            try { window._chart.destroy(); } catch (e) {}
+
+          try {
+            window._chart.setData(window._data || []);
+            window._chart.destroy();
+          } catch (e) {
+            console.error('destroy | could not destroy chart');
           }
+          
           window.__CHART_CREATED__ = false;
+          
           // clear queued ops to avoid stale calls after destroy
           window.__uplot_queue__ = [];
+          
+          true;
         `;
+
         // run immediately (no need to queue)
-        webref.current.injectJavaScript(`${body} true;`);
+        webref.current.injectJavaScript(body);
       }
       initialized.current = false;
     }, []);
