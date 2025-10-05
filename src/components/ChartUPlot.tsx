@@ -710,9 +710,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     // function to call setScale
     const setScale = useCallback((axis: string, options: any): void => {
       if (!isWeb && !loadedRef.current) return;
-      console.log(
-        `setScale | name=${name}, axis=${axis}, options=${JSON.stringify(options)}`,
-      );
+      // console.log(
+      //   `setScale | name=${name}, axis=${axis}, options=${JSON.stringify(options)}`,
+      // );
 
       if (isWeb) {
         uplotInstance.current?.setScale(axis, options);
@@ -737,9 +737,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     // if native, sets the variable to window.[name] via webref.current.injectJavaScript
     const setVariable = useCallback((name: string, value: any): void => {
       if (!isWeb && !loadedRef.current) return;
-      console.log(
-        `setVariable | name=${name}, name=${name}, value=${JSON.stringify(value)}`,
-      );
+      // console.log(
+      //   `setVariable | name=${name}, name=${name}, value=${JSON.stringify(value)}`,
+      // );
 
       variablesRef.current[name] = value;
 
@@ -766,7 +766,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     // function to call setSize
     const setSize = useCallback((width: number, height: number): void => {
       if (!isWeb && !loadedRef.current) return;
-      console.log(`setSize | name=${name}, width=${width}, height=${height}`);
+      // console.log(`setSize | name=${name}, width=${width}, height=${height}`);
 
       if (isWeb) {
         uplotInstance.current?.setSize(width, height);
@@ -790,9 +790,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     // function to call destroy, also clears the data
     const destroy = useCallback((keepData: boolean = false): void => {
       if (!isWeb && !loadedRef.current) return;
-      console.log(
-        `destroy | name=${name}, keepData=${keepData}, data=${data?.length}`,
-      );
+      // console.log(
+      //   `destroy | name=${name}, keepData=${keepData}, data=${data?.length}`,
+      // );
 
       if (!keepData) {
         dataRef.current = [];
@@ -837,7 +837,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const reset = useCallback(
       (opts: any, data: number[][], bgColor?: string): void => {
         if (!isWeb && !loadedRef.current) return;
-        console.log(`reset | name=${name}`);
+        // console.log(`reset | name=${name}`);
         destroy();
         createChart(opts, data, bgColor);
       },
