@@ -336,6 +336,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const variablesRef = useRef<{ [key: string]: any }>({});
     const initialized = useRef<boolean>(false);
     const containerRef = useRef<any>(null);
+    const loadedRef = useRef<boolean>(false);
     const dimensionsRef = useRef({
       containerWidth: Math.round(options?.width || style?.width || width),
       containerHeight: Math.round(options?.height || style?.height || height),
@@ -372,6 +373,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     // memoized onLoadEnd handler for native WebView
     const handleLoadEnd = useCallback((): void => {
       // console.log(`handleLoadEnd | name=${name}`);
+      loadedRef.current = true;
 
       // Use canonical dataRef when creating the native WebView chart
       dataRef.current = toPlainArrays(data as any[]) as number[][];
@@ -428,12 +430,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
         // Native WebView: detect reinitialization and restore variables/data
         if (shouldReinit) {
+          // console.log('Reinitializing WebView chart');
+
           initialized.current = false;
           destroy(true);
-        }
-
-        if (shouldReinit) {
-          // console.log('Reinitializing WebView chart');
 
           // re-add any variables that were set
           let injectedVars = '';
@@ -575,6 +575,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      * @param {Object} newOptions - The new options to set for the chart.
      */
     const updateOptions = useCallback((newOptions: any): void => {
+      if (!isWeb && !loadedRef.current) return;
       // console.log(`updateOptions | name=${name}`);
 
       destroy(true); // keep data
@@ -588,6 +589,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      * @param {number[][]} newData - The new data to set for the chart.
      */
     const setData = useCallback((newData: number[][]): void => {
+      if (!isWeb && !loadedRef.current) return;
       // console.log(`setData | name=${name}, newData length=${newData?.length}`);
 
       // Keep canonical copy (plain arrays)
@@ -619,6 +621,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      * Append a new data point across all series: [x, y1, y2, ...]
      */
     const pushData = useCallback((item: number[]): void => {
+      if (!isWeb && !loadedRef.current) return;
       // console.log(`pushData | name=${name}, item length=${item?.length}`);
 
       // Update canonical copy locally first
@@ -668,6 +671,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      */
     const sliceSeries = useCallback(
       (axis: number, min: number, max: number): void => {
+        if (!isWeb && !loadedRef.current) return;
         // console.log(
         //   `sliceSeries | name=${name}, axis=${axis}, min=${min}, max=${max}`,
         // );
@@ -705,9 +709,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
     // function to call setScale
     const setScale = useCallback((axis: string, options: any): void => {
-      // console.log(
-      //   `setScale | name=${name}, axis=${axis}, options=${JSON.stringify(options)}`,
-      // );
+      if (!isWeb && !loadedRef.current) return;
+      console.log(
+        `setScale | name=${name}, axis=${axis}, options=${JSON.stringify(options)}`,
+      );
 
       if (isWeb) {
         uplotInstance.current?.setScale(axis, options);
@@ -731,9 +736,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     // if web, sets the variable to window.[name]
     // if native, sets the variable to window.[name] via webref.current.injectJavaScript
     const setVariable = useCallback((name: string, value: any): void => {
-      // console.log(
-      //   `setVariable | name=${name}, name=${name}, value=${JSON.stringify(value)}`,
-      // );
+      if (!isWeb && !loadedRef.current) return;
+      console.log(
+        `setVariable | name=${name}, name=${name}, value=${JSON.stringify(value)}`,
+      );
 
       variablesRef.current[name] = value;
 
@@ -759,7 +765,8 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
     // function to call setSize
     const setSize = useCallback((width: number, height: number): void => {
-      // console.log(`setSize | name=${name}, width=${width}, height=${height}`);
+      if (!isWeb && !loadedRef.current) return;
+      console.log(`setSize | name=${name}, width=${width}, height=${height}`);
 
       if (isWeb) {
         uplotInstance.current?.setSize(width, height);
@@ -782,9 +789,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
     // function to call destroy, also clears the data
     const destroy = useCallback((keepData: boolean = false): void => {
-      // console.log(
-      //   `destroy | name=${name}, keepData=${keepData}, data=${data?.length}`,
-      // );
+      if (!isWeb && !loadedRef.current) return;
+      console.log(
+        `destroy | name=${name}, keepData=${keepData}, data=${data?.length}`,
+      );
 
       if (!keepData) {
         dataRef.current = [];
@@ -828,7 +836,8 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     // destroy, clear data, and reinitialize the chart when the component unmounts
     const reset = useCallback(
       (opts: any, data: number[][], bgColor?: string): void => {
-        // console.log(`reset | name=${name}`);
+        if (!isWeb && !loadedRef.current) return;
+        console.log(`reset | name=${name}`);
         destroy();
         createChart(opts, data, bgColor);
       },
