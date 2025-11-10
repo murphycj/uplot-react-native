@@ -3,6 +3,13 @@ const fs = require('fs');
 const path = require('path');
 
 const projectRoot = path.resolve(__dirname, '..');
+const chartPath = path.join(projectRoot, 'src', 'components', 'ChartUPlot.tsx');
+const chartPathOut = path.join(
+  projectRoot,
+  'dist',
+  'components',
+  'ChartUPlot.tsx',
+);
 const htmlPath = path.join(projectRoot, 'src', 'components', 'uplot.html');
 const htmlPathOut = path.join(projectRoot, 'dist', 'components', 'uplot.html');
 const cssPath = path.join(
@@ -22,7 +29,8 @@ const jsPath = path.join(
 
 async function main() {
   try {
-    const [html, css, js] = await Promise.all([
+    const [chart, html, css, js] = await Promise.all([
+      fs.promises.readFile(chartPath, 'utf8'),
       fs.promises.readFile(htmlPath, 'utf8'),
       fs.promises.readFile(cssPath, 'utf8'),
       fs.promises.readFile(jsPath, 'utf8'),
@@ -35,8 +43,22 @@ async function main() {
       .replace(/'\{\{UPLOT_CSS\}\}'/, cssTag)
       .replace(/'\{\{UPLOT_JS\}\}'/, jsTag);
 
-    await fs.promises.writeFile(htmlPathOut, replaced, 'utf8');
-    console.log('uplot assets injected into uplot.html');
+    // var chartReplaced = chart.replace(
+    //   '{{UPLOT_HTML}}',
+    //   replaced.replace(/`/g, '\\`'),
+    // );
+
+    // const escapedHtmlForTemplate = replaced
+    //   .replace(/`/g, '\\`') // escape backticks
+    //   .replace(/\$\{/g, '\\${');
+    // var chartReplaced = chart.replace('{{UPLOT_HTML}}', escapedHtmlForTemplate);
+
+    var chartReplaced = chart.replace("'UPLOT_HTML'", JSON.stringify(replaced));
+
+    await fs.promises.writeFile(chartPathOut, chartReplaced, 'utf8');
+
+    // await fs.promises.writeFile(htmlPathOut, replaced, 'utf8');
+    // console.log('uplot assets injected into uplot.html');
   } catch (err) {
     console.error('Error injecting uplot assets:', err);
     process.exit(1);

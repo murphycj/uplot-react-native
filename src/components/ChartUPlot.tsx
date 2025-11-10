@@ -10,9 +10,11 @@ import React, {
 import { Platform, useWindowDimensions, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import html from './uplot.html';
+// import html from './uplot.html';
 import 'uplot/dist/uPlot.min.css';
 var isWeb = Platform.OS === 'web';
+
+var html: string = 'UPLOT_HTML';
 
 var uPlot: any = null;
 if (isWeb) {
@@ -855,6 +857,21 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       `;
     }, [injectedJavaScript]);
 
+    const finalHtml = useMemo(() => {
+      var finalHtml = html;
+      if (injectedJavaScript) {
+        finalHtml = html.replace(
+          "'{{CUSTOM_JS}}'",
+          `<script>
+            ${injectedJavaScriptWithFunctions}
+          </script>`,
+        );
+      } else {
+        finalHtml = html.replace("'{{CUSTOM_JS}}'", '');
+      }
+      return finalHtml;
+    }, [injectedJavaScript, injectedJavaScriptWithFunctions]);
+
     useImperativeHandle(ref, () => ({
       createChart,
       updateOptions,
@@ -883,7 +900,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         <WebView
           {...webviewProps}
           originWhitelist={['*']}
-          source={html}
+          source={{ html: finalHtml }}
           allowingReadAccessToURLs={true}
           style={memoizedContainerStyle}
           scrollEnabled={false}
