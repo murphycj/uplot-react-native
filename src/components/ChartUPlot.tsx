@@ -225,8 +225,22 @@ function getCreateChartString(
             if (window._chart) {
               try { window._chart.destroy(); } catch (e) {}
             }
+            
+            // get element by id and make sure it exists
+            var chartEl = document.getElementById('chart');
+            if (!chartEl) {
+              console.error('createUPlotChart: chart element not found');
+              return;
+            }
 
-            window._chart = new uPlot(window._opts, window._data, document.getElementById('chart'));
+            // create the chart
+
+            requestAnimationFrame(() => {
+              window._chart = new uPlot(window._opts, window._data, chartEl);
+              window.__CHART_CREATED__ = true;
+              console.log('uPlot chart created (after rAF)');
+            });
+
 
             // mark created and flush queued commands
             window.__CHART_CREATED__ = true;
@@ -329,6 +343,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const { width, height } = useWindowDimensions();
     let webref: any = useRef(null);
     const uplotInstance = useRef<any>(null);
+    // const [webviewKey, setWebviewKey] = useState<string>(
+    //   `uplot-webview-${Date.now()}`,
+    // );
     // Ensure we keep an independent copy of the incoming `data` so modifications
     // to dataRef.current do NOT mutate the original prop. toPlainArrays converts
     // typed arrays into plain arrays and returns new arrays.
@@ -349,7 +366,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const handleLayout = useCallback((event) => {
       const { width, height } = event.nativeEvent.layout;
       // console.log(
-      //   `handleLayout | name=${name}, width=${width}, height=${height}`,
+      //   `handleLayout | name=${name}, width=${width}, height=${height}, timeMs=${Date.now()}`,
       // );
 
       dimensionsRef.current = {
@@ -374,13 +391,12 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
     // memoized onLoadEnd handler for native WebView
     const handleLoadEnd = useCallback((): void => {
-      // console.log(`handleLoadEnd | name=${name}`);
+      // console.log(`handleLoadEnd | name=${name}, timeMs=${Date.now()}`);
       loadedRef.current = true;
 
       // Use canonical dataRef when creating the native WebView chart
       dataRef.current = toPlainArrays(data as any[]) as number[][];
       createChart(options, dataRef.current, bgColor);
-
       if (onLoad) {
         onLoad();
       }
@@ -432,7 +448,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
         // Native WebView: detect reinitialization and restore variables/data
         if (shouldReinit) {
-          // console.log('Reinitializing WebView chart');
+          console.log('Reinitializing WebView chart');
 
           initialized.current = false;
           destroy(true);
@@ -522,12 +538,17 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const createChart = useCallback(
-      (opts: any, data: number[][] | null = null, bgColor?: string): void => {
+      (
+        opts: any,
+        data: number[][] | null = null,
+        bgColor?: string,
+        force: boolean = false,
+      ): void => {
         // console.log(
-        //   `createChart | name=${name} | initialized=${initialized.current}`,
+        //   `createChart | name=${name} | initialized=${initialized.current}, timeMs=${Date.now()}, w=${dimensionsRef.current.containerWidth}, h=${dimensionsRef.current.containerHeight}`,
         // );
 
-        if (initialized.current) {
+        if (initialized.current && !force) {
           return;
         }
 
@@ -564,6 +585,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           );
 
           webref.current.injectJavaScript(createChartStr);
+          // console.log('uPlot createChart injected, timeMs=', Date.now());
         }
         initialized.current = true;
       },
@@ -885,8 +907,6 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       reset,
     }));
 
-    // console.log(`render | name=${name}`);
-
     if (Platform.OS === 'web') {
       return (
         <View
@@ -899,6 +919,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       return (
         <WebView
           {...webviewProps}
+          // key={webviewKey}
           originWhitelist={['*']}
           source={{ html: finalHtml }}
           allowingReadAccessToURLs={true}
@@ -913,6 +934,16 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             injectedJavaScriptWithFunctions
           }
           onMessage={handleMessage}
+          // onContentProcessDidTerminate={(_) => {
+          // IOS
+          // console.log('onContentProcessDidTerminate');
+          // setAutoIncrementingNumber(autoIncrementingNumber + 1);
+          // }}
+          // onRenderProcessGone={(_) => {
+          // Android
+          // setAutoIncrementingNumber(autoIncrementingNumber + 1);
+          // console.log('onRenderProcessGone');
+          // }}
         />
       );
     }
