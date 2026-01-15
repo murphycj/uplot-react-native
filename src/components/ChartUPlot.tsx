@@ -197,10 +197,15 @@ function getCreateChartString(
   options: any,
   bgColor: string = 'transparent',
   injectedJavaScript: string = '',
+  name: string = 'uPlot',
 ): string {
   // Prepare data assignment only if data is not null
   const dataAssignment =
     data !== null ? `window._data = ${JSON.stringify(data)};` : '';
+
+  // console.log(
+  //   `getCreateChartString | name=${name}, data length=${data ? data[0]?.length : 'null'}`,
+  // );
 
   const chartCreatedCheck =
     data !== null ? `if (window.__CHART_CREATED__) return;` : ``;
@@ -225,7 +230,35 @@ function getCreateChartString(
             if (window._chart) {
               try { window._chart.destroy(); } catch (e) {}
             }
-            
+
+            // CLEAR ANY EXISTING CONTENT to avoid stacking multiple charts
+            // try {
+            // chartEl.innerHTML = '';
+            // console.log('Cleared existing chart content');
+            // } catch (e) { /* ignore */ }
+
+            // remove any left-over uPlot DOM elements and reset the container
+            try {
+              document.querySelectorAll('.uplot').forEach(function(n){
+                if (n && n.parentNode) {
+                  console.log('Removing leftover uPlot element');
+                  n.parentNode.removeChild(n);
+                }
+              });
+
+              var _existing = document.getElementById('chart');
+              if (_existing && _existing.parentNode) {
+                var _fresh = document.createElement('div');
+                _fresh.id = 'chart';
+                _existing.parentNode.replaceChild(_fresh, _existing);
+                console.log('Replaced chart container with fresh div');
+              } else {
+                console.warn('Chart container not found for replacement');
+              }
+            } catch (e) {
+              console.error('Error cleaning up existing chart elements', e);
+            }
+
             // get element by id and make sure it exists
             var chartEl = document.getElementById('chart');
             if (!chartEl) {
@@ -236,9 +269,11 @@ function getCreateChartString(
             // create the chart
 
             requestAnimationFrame(() => {
+              // console.log('Creating uPlot chart...');
+              // console.log(['${name}', window._data.length, window._data[0].length]);
               window._chart = new uPlot(window._opts, window._data, chartEl);
               window.__CHART_CREATED__ = true;
-              console.log('uPlot chart created (after rAF)');
+              // console.log('uPlot chart created (after rAF)');
             });
 
 
@@ -352,6 +387,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const dataRef = useRef<number[][]>(
       toPlainArrays((data || []) as any[]) as number[][],
     );
+    // console.log(
+    //   `ChartUPlot | name=${name}, dataRef length=${dataRef.current ? dataRef.current[0]?.length : 'null'}`,
+    // );
     const variablesRef = useRef<{ [key: string]: any }>({});
     const initialized = useRef<boolean>(false);
     const containerRef = useRef<any>(null);
@@ -448,7 +486,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
         // Native WebView: detect reinitialization and restore variables/data
         if (shouldReinit) {
-          console.log('Reinitializing WebView chart');
+          // console.log('Reinitializing WebView chart');
 
           initialized.current = false;
           destroy(true);
@@ -471,16 +509,6 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       },
       [options, data, bgColor],
     );
-
-    // useEffect(() => {
-    //   console.log('useffect [ref]', ref);
-
-    //   if (Platform.OS === 'web') {
-    //     console.log('useffect [ref] - success');
-    //     handleLoadEnd();
-    //     return;
-    //   }
-    // }, [ref]);
 
     // Keep canonical copy of incoming prop `data` (convert typed arrays to plain arrays).
     // Also mirror to window._data for native platforms when webref is available.
@@ -545,7 +573,11 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         force: boolean = false,
       ): void => {
         // console.log(
-        //   `createChart | name=${name} | initialized=${initialized.current}, timeMs=${Date.now()}, w=${dimensionsRef.current.containerWidth}, h=${dimensionsRef.current.containerHeight}`,
+        //   `createChart | name=${name} | initialized=${initialized.current}, timeMs=${Date.now()}`,
+        // );
+        // print out length of data and dataRef
+        // console.log(
+        //   `createChart | data name=${name} length=${data ? data[0]?.length : 'null'}, dataRef length=${dataRef.current ? dataRef.current[0]?.length : 'null'}`,
         // );
 
         if (initialized.current && !force) {
@@ -582,6 +614,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             optsFinal,
             bgColor,
             UTIL_FUNCTIONS,
+            name,
           );
 
           webref.current.injectJavaScript(createChartStr);
@@ -614,7 +647,8 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
      */
     const setData = useCallback((newData: number[][]): void => {
       if (!isWeb && !loadedRef.current) return;
-      // console.log(`setData | name=${name}, newData length=${newData?.length}`);
+      var n = newData[0].length;
+      // console.log(`setData | name=${name}, newData length=${n}`);
 
       // Keep canonical copy (plain arrays)
       const plain = toPlainArrays(newData as any[]);
@@ -633,12 +667,17 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       const body = `
         window._data = ${JSON.stringify(dataRef.current)};
         if (window._chart) {
+          // console.log('setData | name=${name}, data length=${n}');
+          // console.log(window._data[0].length);
           window._chart.setData(window._data);
         } else {
           console.error('setData | Chart not initialized');
         }
       `;
-      webref.current.injectJavaScript(runWhenReady(body));
+      // console.log('setData | calling webref.current.injectJavaScript');
+
+      // webref.current.injectJavaScript(runWhenReady(body));
+      webref.current.injectJavaScript(body);
     }, []);
 
     /**
@@ -843,6 +882,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             console.error('destroy | could not destroy chart');
           }
           
+          window._chart = null;
           window.__CHART_CREATED__ = false;
           
           // clear queued ops to avoid stale calls after destroy
