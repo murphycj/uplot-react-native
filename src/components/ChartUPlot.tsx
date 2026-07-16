@@ -268,7 +268,11 @@ function getCreateChartString(
 
             // create the chart
 
-            requestAnimationFrame(() => {
+            if (window.__uplot_create_raf__) {
+              cancelAnimationFrame(window.__uplot_create_raf__);
+            }
+            window.__uplot_create_raf__ = requestAnimationFrame(() => {
+              window.__uplot_create_raf__ = null;
               // console.log('Creating uPlot chart...');
               // console.log(['${name}', window._data.length, window._data[0].length]);
               window._chart = new uPlot(window._opts, window._data, chartEl);
@@ -296,15 +300,20 @@ function getCreateChartString(
         } else {
           var __waitCount = 0;
           var __waitMax = 20; // ~1s with 50ms interval
-          var __iv = setInterval(function() {
+          if (window.__uplot_load_interval__) {
+            clearInterval(window.__uplot_load_interval__);
+          }
+          window.__uplot_load_interval__ = setInterval(function() {
             if (typeof window.uPlot !== 'undefined') {
-              clearInterval(__iv);
+              clearInterval(window.__uplot_load_interval__);
+              window.__uplot_load_interval__ = null;
               __createUPlotChart();
               return;
             }
             __waitCount++;
             if (__waitCount >= __waitMax) {
-              clearInterval(__iv);
+              clearInterval(window.__uplot_load_interval__);
+              window.__uplot_load_interval__ = null;
               console.error('uPlot not found after timeout; ensure uPlot script is included in the HTML');
             }
           }, 50);
@@ -394,6 +403,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const initialized = useRef<boolean>(false);
     const containerRef = useRef<any>(null);
     const loadedRef = useRef<boolean>(false);
+    const cleanupGenerationRef = useRef<number>(0);
     const dimensionsRef = useRef({
       containerWidth: Math.round(options?.width || style?.width || width),
       containerHeight: Math.round(options?.height || style?.height || height),
@@ -469,15 +479,16 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       (r: any) => {
         // console.log(`setWebRef | name=${name}`);
 
+        if (!r) return;
+
         const prevContainer = containerRef.current;
         const prevWeb = webref.current;
         const shouldReinit = Boolean(prevContainer && r && r !== prevWeb);
 
-        // update refs (allow clearing when r is null)
+        // Keep the last mounted node until effect cleanup so native teardown can
+        // still inject its final cleanup before React releases the WebView.
         containerRef.current = r;
         webref.current = r;
-
-        if (!r) return;
 
         // On web, simply create chart when the DOM node appears
         if (isWeb) {
@@ -850,54 +861,143 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       }
     }, []);
 
-    // function to call destroy, also clears the data
-    const destroy = useCallback((keepData: boolean = false): void => {
-      if (!isWeb && !loadedRef.current) return;
-      // console.log(
-      //   `destroy | name=${name}, keepData=${keepData}, data=${data?.length}`,
-      // );
+    // Destroy the current chart and optionally retain data for immediate recreation.
+    const destroy = useCallback(
+      (keepData: boolean = false, clearVariables: boolean = false): void => {
+        // console.log(
+        //   `destroy | name=${name}, keepData=${keepData}, data=${data?.length}`,
+        // );
 
-      if (!keepData) {
-        dataRef.current = [];
-      }
-
-      if (isWeb) {
-        uplotInstance.current?.destroy();
-      } else {
-        if (!webref?.current) {
-          console.error('WebView reference is not set');
-          return;
+        if (!keepData) {
+          dataRef.current = [];
         }
 
-        var keepDataStr = keepData ? '' : `window._data = [];`;
-        // var dataStr = data ? `window._data = ${JSON.stringify(data)};` : '';
+        const variableNames = clearVariables
+          ? Object.keys(variablesRef.current)
+          : [];
 
-        const body = `
-          ${keepDataStr}
+        if (isWeb) {
+          const instance = uplotInstance.current;
+          const canvas = instance?.ctx?.canvas;
 
           try {
-            window._chart.setData(window._data || []);
-            window._chart.destroy();
-          } catch (e) {
-            console.error('destroy | could not destroy chart');
+            instance?.destroy();
+          } catch (error) {
+            console.error('destroy | could not destroy chart', error);
+          } finally {
+            // Explicitly release the canvas backing store before dropping the
+            // last component-owned reference to the uPlot instance.
+            if (canvas) {
+              canvas.width = 0;
+              canvas.height = 0;
+            }
+            uplotInstance.current = null;
           }
-          
-          window._chart = null;
-          window.__CHART_CREATED__ = false;
-          
-          // clear queued ops to avoid stale calls after destroy
-          window.__uplot_queue__ = [];
-          
-          true;
-        `;
 
-        // run immediately (no need to queue)
-        webref.current.injectJavaScript(body);
-      }
-      initialized.current = false;
-    }, []);
+          if (clearVariables && typeof window !== 'undefined') {
+            variableNames.forEach((variableName) => {
+              if (
+                (window as any)[variableName] ===
+                variablesRef.current[variableName]
+              ) {
+                delete (window as any)[variableName];
+              }
+            });
+          }
+        } else {
+          const currentWebView = webref.current;
 
-    // destroy, clear data, and reinitialize the chart when the component unmounts
+          if (loadedRef.current && currentWebView) {
+            var keepDataStr = keepData ? '' : `window._data = [];`;
+            const clearVariablesStr = clearVariables
+              ? `
+              ${JSON.stringify(variableNames)}.forEach(function(variableName) {
+                try { delete window[variableName]; } catch (e) { window[variableName] = undefined; }
+              });
+              window._opts = null;
+            `
+              : '';
+            // var dataStr = data ? `window._data = ${JSON.stringify(data)};` : '';
+
+            const body = `
+            ${keepDataStr}
+
+            if (window.__uplot_create_raf__) {
+              cancelAnimationFrame(window.__uplot_create_raf__);
+              window.__uplot_create_raf__ = null;
+            }
+            if (window.__uplot_load_interval__) {
+              clearInterval(window.__uplot_load_interval__);
+              window.__uplot_load_interval__ = null;
+            }
+
+            if (window._chart) {
+              var chart = window._chart;
+              var canvas = chart.ctx && chart.ctx.canvas;
+              try {
+                chart.setData(window._data || []);
+              } catch (e) {
+                console.error('destroy | could not clear chart data');
+              }
+              try {
+                chart.destroy();
+              } catch (e) {
+                console.error('destroy | could not destroy chart');
+              } finally {
+                if (canvas) {
+                  canvas.width = 0;
+                  canvas.height = 0;
+                }
+              }
+            }
+
+            window._chart = null;
+            window.__CHART_CREATED__ = false;
+            window.__uplot_queue__ = [];
+            ${clearVariablesStr}
+
+            true;
+          `;
+
+            // Run immediately so teardown cannot be stranded in the queue it clears.
+            currentWebView.injectJavaScript(body);
+          }
+        }
+        initialized.current = false;
+      },
+      [],
+    );
+
+    useEffect(() => {
+      cleanupGenerationRef.current += 1;
+
+      return () => {
+        const cleanupGeneration = ++cleanupGenerationRef.current;
+
+        // Defer by one microtask so React Strict Mode's simulated cleanup/setup
+        // can invalidate this terminal teardown while real unmounts still clean
+        // up before the next animation frame.
+        Promise.resolve().then(() => {
+          if (cleanupGenerationRef.current !== cleanupGeneration) return;
+
+          // Terminal cleanup is intentionally stronger than destroy(true), which
+          // updateOptions uses while rebuilding the chart with retained state.
+          try {
+            destroy(false, true);
+          } finally {
+            dataRef.current = [];
+            variablesRef.current = {};
+            initialized.current = false;
+            loadedRef.current = false;
+            uplotInstance.current = null;
+            containerRef.current = null;
+            webref.current = null;
+          }
+        });
+      };
+    }, [destroy]);
+
+    // Destroy, clear data, and recreate the chart with replacement inputs.
     const reset = useCallback(
       (opts: any, data: number[][], bgColor?: string): void => {
         if (!isWeb && !loadedRef.current) return;
