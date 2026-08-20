@@ -82,6 +82,12 @@ The `ref` exposes the following methods:
 - `setSize(width, height)`: Set the size of the chart.
 - `destroy()`: Destroy the chart instance.
 
+Use the `onLoad` prop when initial imperative setup depends on the chart. On
+iOS and Android it runs after the underlying uPlot instance has been created,
+not merely after the WebView document loads. Data and scale updates issued
+while native chart creation is finishing are queued until the instance is
+ready.
+
 ### Dimensions
 
 You can set the width and height either through the uPlot `options` or by passing a `style` prop to the `ChartUPlot` component. If you set both, the uPlot `options` will take precedence. Any changes to the width and height in the `options` will not automatically update the chart size.

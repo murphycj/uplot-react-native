@@ -6,3 +6,4 @@ esm/
 .vscode/
 ios/
 *.ipa
+.DS_Store

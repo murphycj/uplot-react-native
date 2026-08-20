@@ -198,6 +198,7 @@ function getCreateChartString(
   bgColor: string = 'transparent',
   injectedJavaScript: string = '',
   name: string = 'uPlot',
+  generation: number = 0,
 ): string {
   // Prepare data assignment only if data is not null
   const dataAssignment =
@@ -207,17 +208,14 @@ function getCreateChartString(
   //   `getCreateChartString | name=${name}, data length=${data ? data[0]?.length : 'null'}`,
   // );
 
-  const chartCreatedCheck =
-    data !== null ? `if (window.__CHART_CREATED__) return;` : ``;
-
   return `
     (function() {
-        ${chartCreatedCheck}
-
         // ensure helper functions are available
         ${injectedJavaScript}
 
         document.body.style.backgroundColor='${bgColor}';
+        window.__uplot_requested_generation__ = ${generation};
+        window.__CHART_CREATED__ = false;
 
         // stash your data on window if provided
         ${dataAssignment}
@@ -271,23 +269,31 @@ function getCreateChartString(
             if (window.__uplot_create_raf__) {
               cancelAnimationFrame(window.__uplot_create_raf__);
             }
-            window.__uplot_create_raf__ = requestAnimationFrame(() => {
+            window.__uplot_create_raf__ = requestAnimationFrame(function() {
               window.__uplot_create_raf__ = null;
-              // console.log('Creating uPlot chart...');
-              // console.log(['${name}', window._data.length, window._data[0].length]);
-              window._chart = new uPlot(window._opts, window._data, chartEl);
-              window.__CHART_CREATED__ = true;
-              // console.log('uPlot chart created (after rAF)');
+              if (window.__uplot_requested_generation__ !== ${generation}) return;
+
+              try {
+                window._chart = new uPlot(window._opts, window._data, chartEl);
+                window.__CHART_CREATED__ = true;
+
+                // Imperative calls made while the WebView was loading can now run safely.
+                if (window.__uplot_flush__) {
+                  try { window.__uplot_flush__(); } catch (e) { console.error('flush error', e); }
+                }
+
+                if (window.ReactNativeWebView) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'ChartReady',
+                    data: { name: ${JSON.stringify(name)}, generation: ${generation} }
+                  }));
+                }
+              } catch (err) {
+                console.error('createUPlotChart error', err && err.message ? err.message : err);
+                window._chart = null;
+                window.__CHART_CREATED__ = false;
+              }
             });
-
-
-            // mark created and flush queued commands
-            window.__CHART_CREATED__ = true;
-            if (window.__uplot_flush__) {
-              try { window.__uplot_flush__(); } catch (e) { console.error('flush error', e); }
-            }
-
-            console.log('uPlot chart created');
           } catch (err) {
             console.error('createUPlotChart error', err && err.message ? err.message : err);
             window.__CHART_CREATED__ = false;
@@ -357,7 +363,7 @@ export interface UPlotProps {
   margin?: { title?: number; legend?: number };
   /** Callback for messages from the WebView */
   onMessage?: (event: any) => void;
-  /** Callback when the WebView has loaded */
+  /** Callback when the underlying uPlot chart is ready for imperative calls */
   onLoad?: (() => void) | null;
   /** JavaScript to be injected into the WebView */
   injectedJavaScript?: string;
@@ -403,6 +409,8 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const initialized = useRef<boolean>(false);
     const containerRef = useRef<any>(null);
     const loadedRef = useRef<boolean>(false);
+    const chartGenerationRef = useRef<number>(0);
+    const readyGenerationRef = useRef<number>(0);
     const cleanupGenerationRef = useRef<number>(0);
     const dimensionsRef = useRef({
       containerWidth: Math.round(options?.width || style?.width || width),
@@ -441,11 +449,13 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const handleLoadEnd = useCallback((): void => {
       // console.log(`handleLoadEnd | name=${name}, timeMs=${Date.now()}`);
       loadedRef.current = true;
+      if (!isWeb) initialized.current = false;
 
       // Use canonical dataRef when creating the native WebView chart
       dataRef.current = toPlainArrays(data as any[]) as number[][];
-      createChart(options, dataRef.current, bgColor);
-      if (onLoad) {
+      const generation = createChart(options, dataRef.current, bgColor);
+      if (isWeb && generation !== null && onLoad) {
+        readyGenerationRef.current = generation;
         onLoad();
       }
     }, [data, options, bgColor, onLoad]);
@@ -453,25 +463,35 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     // memoized onMessage handler for native WebView
     const handleMessage = useCallback(
       (payload: any): void => {
-        if (onMessage) {
-          onMessage(payload);
-          return;
-        }
-
         let dataPayload;
         try {
           dataPayload = JSON.parse(payload.nativeEvent.data);
         } catch (e) {}
 
-        if (dataPayload) {
+        if (dataPayload?.type === 'ChartReady') {
+          const generation = Number(dataPayload.data?.generation);
+          if (
+            generation === chartGenerationRef.current &&
+            generation !== readyGenerationRef.current
+          ) {
+            readyGenerationRef.current = generation;
+            onLoad?.();
+          }
+          return;
+        }
+
+        // Keep the readiness handshake internal and preserve existing public messages.
+        if (onMessage) {
+          onMessage(payload);
+        } else if (dataPayload) {
           if (dataPayload.type === 'Console') {
             console.info(`[Console] ${JSON.stringify(dataPayload.data)}`);
-          } else {
+          } else if (dataPayload.type !== 'ChartReady') {
             console.log(dataPayload);
           }
         }
       },
-      [onMessage],
+      [onLoad, onMessage],
     );
 
     // memoized ref callback for both web container and native WebView
@@ -582,7 +602,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         data: number[][] | null = null,
         bgColor?: string,
         force: boolean = false,
-      ): void => {
+      ): number | null => {
         // console.log(
         //   `createChart | name=${name} | initialized=${initialized.current}, timeMs=${Date.now()}`,
         // );
@@ -592,8 +612,11 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         // );
 
         if (initialized.current && !force) {
-          return;
+          return null;
         }
+
+        const generation = ++chartGenerationRef.current;
+        readyGenerationRef.current = 0;
 
         const optsFinal: any = getDimensions(
           opts,
@@ -615,7 +638,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           // inject background color before chart setup if provided
           if (!webref?.current) {
             console.error('WebView reference is not set');
-            return;
+            return null;
           }
 
           // Ensure dataRef is the source of truth for the created chart in the WebView
@@ -626,12 +649,14 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
             bgColor,
             UTIL_FUNCTIONS,
             name,
+            generation,
           );
 
           webref.current.injectJavaScript(createChartStr);
           // console.log('uPlot createChart injected, timeMs=', Date.now());
         }
         initialized.current = true;
+        return generation;
       },
       [],
     );
@@ -687,8 +712,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       `;
       // console.log('setData | calling webref.current.injectJavaScript');
 
-      // webref.current.injectJavaScript(runWhenReady(body));
-      webref.current.injectJavaScript(body);
+      webref.current.injectJavaScript(runWhenReady(body));
     }, []);
 
     /**
@@ -871,6 +895,8 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
         if (!keepData) {
           dataRef.current = [];
         }
+        chartGenerationRef.current += 1;
+        readyGenerationRef.current = 0;
 
         const variableNames = clearVariables
           ? Object.keys(variablesRef.current)
@@ -953,6 +979,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
             window._chart = null;
             window.__CHART_CREATED__ = false;
+            window.__uplot_requested_generation__ = null;
             window.__uplot_queue__ = [];
             ${clearVariablesStr}
 
@@ -1034,6 +1061,9 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       return finalHtml;
     }, [injectedJavaScript, injectedJavaScriptWithFunctions]);
 
+    // Keep iOS from navigating the WebView again on unrelated React renders.
+    const webViewSource = useMemo(() => ({ html: finalHtml }), [finalHtml]);
+
     useImperativeHandle(ref, () => ({
       createChart,
       updateOptions,
@@ -1061,7 +1091,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
           {...webviewProps}
           // key={webviewKey}
           originWhitelist={['*']}
-          source={{ html: finalHtml }}
+          source={webViewSource}
           allowingReadAccessToURLs={true}
           style={memoizedContainerStyle}
           scrollEnabled={false}
