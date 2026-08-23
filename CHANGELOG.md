@@ -1,5 +1,11 @@
 # uplot-react-native
 
+## 0.1.16
+
+### Patch Changes
+
+- Fix chart resizing by passing uPlot the required `{ width, height }` size object, preventing native charts from collapsing to zero width during initial rendering.
+
 ## 0.1.5
 
 ### Patch Changes

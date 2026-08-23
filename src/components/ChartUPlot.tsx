@@ -583,7 +583,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
         const body = `
           if (window._chart) {
-            window._chart.setSize(${JSON.stringify(dimensionsRef.current.containerWidth)}, ${JSON.stringify(dimensionsRef.current.containerHeight)});
+            window._chart.setSize({
+              width: ${JSON.stringify(dimensionsRef.current.containerWidth)},
+              height: ${JSON.stringify(dimensionsRef.current.containerHeight)}
+            });
           } else {
             console.error('useEffect - dim | Chart not initialized');
           }
@@ -867,7 +870,7 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       // console.log(`setSize | name=${name}, width=${width}, height=${height}`);
 
       if (isWeb) {
-        uplotInstance.current?.setSize(width, height);
+        uplotInstance.current?.setSize({ width, height });
       } else {
         if (!webref) {
           console.error('WebView reference is not set');
@@ -876,7 +879,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
         const body = `
           if (window._chart) {
-            window._chart.setSize(${JSON.stringify(width)}, ${JSON.stringify(height)});
+            window._chart.setSize({
+              width: ${JSON.stringify(width)},
+              height: ${JSON.stringify(height)}
+            });
           } else {
             console.error('setSize | Chart not initialized');
           }
