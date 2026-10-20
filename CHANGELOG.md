@@ -1,5 +1,12 @@
 # uplot-react-native
 
+## 0.1.17
+
+### Patch Changes
+
+- Keep web chart dimensions current through imperative resizing and delayed layout callbacks, preventing desktop-width canvases from overflowing narrow containers. Preserve the existing chart instance, data and zoom during resizing.
+- Add regression coverage for the published JavaScript and TypeScript wrappers.
+
 ## 0.1.16
 
 ### Patch Changes

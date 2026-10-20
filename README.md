@@ -177,3 +177,10 @@ If you would like to contribute, please open an issue or a pull request. Contrib
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Development checks
+
+Run `yarn ci` to build the package, run its regression tests and check formatting.
+The resize tests load both published JS and TSX wrappers with real React hooks and
+a synthetic chart surface. They cover stale dimension effects, delayed DOM layout
+events and layout-only resizing while preserving the chart instance, data and zoom.

@@ -420,7 +420,10 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
     const bgColor = style?.backgroundColor || 'transparent';
 
     const handleLayout = useCallback((event) => {
-      const { width, height } = event.nativeEvent.layout;
+      // Web layout callbacks can arrive after a newer imperative/container resize.
+      const { width, height } =
+        (isWeb && containerRef.current?.getBoundingClientRect?.()) ||
+        event.nativeEvent.layout;
       // console.log(
       //   `handleLayout | name=${name}, width=${width}, height=${height}, timeMs=${Date.now()}`,
       // );
@@ -432,6 +435,11 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
 
       if (isWeb) {
         handleLoadEnd();
+        // A ref update alone does not schedule React's dimensions effect.
+        uplotInstance.current?.setSize({
+          width: dimensionsRef.current.containerWidth,
+          height: dimensionsRef.current.containerHeight,
+        });
       }
     }, []);
 
@@ -870,6 +878,11 @@ const ChartUPlot = forwardRef<any, UPlotProps>(
       // console.log(`setSize | name=${name}, width=${width}, height=${height}`);
 
       if (isWeb) {
+        // Later layout effects and chart recreation must use the same current size.
+        dimensionsRef.current = {
+          containerWidth: width,
+          containerHeight: height,
+        };
         uplotInstance.current?.setSize({ width, height });
       } else {
         if (!webref) {

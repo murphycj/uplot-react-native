@@ -1,6 +1,6 @@
 {
   "name": "uplot-react-native",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "React Native wrapper for uPlot on web, iOS, and Android",
   "homepage": "https://github.com/murphycj/uplot-react-native",
   "bugs": {
@@ -19,11 +19,12 @@
   ],
   "scripts": {
     "build": "tsc && node scripts/replace-uplot-assets.cjs",
-    "ci": "npm run build && npm run check-format",
+    "ci": "yarn build && yarn test && yarn check-format",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "local-release": "changeset version && changeset publish",
-    "prepublishOnly": "npm run ci"
+    "prepublishOnly": "yarn ci",
+    "test": "node --test scripts/tests/*.test.mjs"
   },
   "dependencies": {
     "react-native-webview": ">=13.0.0",
@@ -36,8 +37,11 @@
     "@types/react-native": "^0.64.0",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",
+    "esbuild": "0.25.11",
     "eslint": "^8.0.0",
     "prettier": "^3.6.0",
+    "react": "19.2.3",
+    "react-test-renderer": "19.2.3",
     "typescript": "^4.9.0"
   },
   "resolutions": {
